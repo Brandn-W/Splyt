@@ -777,7 +777,7 @@ async function getExpenseConversion(amount, baseCurrency, originalCurrency) {
   }
 
   try {
-    const url = `https://api.frankfurter.app/latest?from=${encodeURIComponent(baseCurrency)}&to=${encodeURIComponent(originalCurrency)}`;
+    const url = `https://api.frankfurter.dev/v1/latest?from=${encodeURIComponent(baseCurrency)}&to=${encodeURIComponent(originalCurrency)}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error("exchange-rate-failed");
 
