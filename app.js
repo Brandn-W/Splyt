@@ -1,0 +1,1356 @@
+// Replace with your Firebase project config
+const firebaseConfig = {
+  apiKey: "AIzaSyC2oVO4c9y2UHve-PSkUMsrJpQVLtT_sl8",
+  authDomain: "splitwise-free-277e2.firebaseapp.com",
+  projectId: "splitwise-free-277e2",
+  storageBucket: "splitwise-free-277e2.firebasestorage.app",
+  messagingSenderId: "865350056921",
+  appId: "1:865350056921:web:eb7ef29c3e84abd23f77c8",
+  measurementId: "G-TRF0J1PQRQ"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+const FieldValue = firebase.firestore.FieldValue;
+
+const CURRENCIES = ["GBP", "USD", "EUR", "MYR", "JPY", "THB", "AUD", "CAD", "SGD"];
+
+const state = {
+  user: null,
+  trips: [],
+  expenses: [],
+  memberProfiles: {},
+  selectedTripId: null,
+  activeTab: "expenses",
+  expenseSplitMode: "equal",
+  editingExpenseId: null,
+  unsubscribeTrips: null,
+  unsubscribeExpenses: null,
+  pendingInviteTripId: new URLSearchParams(window.location.search).get("tripId")
+};
+
+const els = {
+  landing: document.getElementById("landing"),
+  app: document.getElementById("app"),
+  googleSignInBtn: document.getElementById("googleSignInBtn"),
+  signOutBtn: document.getElementById("signOutBtn"),
+  userPhoto: document.getElementById("userPhoto"),
+  userName: document.getElementById("userName"),
+  userEmail: document.getElementById("userEmail"),
+  tripList: document.getElementById("tripList"),
+  emptyState: document.getElementById("emptyState"),
+  tripDashboard: document.getElementById("tripDashboard"),
+  tripName: document.getElementById("tripName"),
+  tripCurrency: document.getElementById("tripCurrency"),
+  mobileTripTitle: document.getElementById("mobileTripTitle"),
+  memberCount: document.getElementById("memberCount"),
+  detailMemberCount: document.getElementById("detailMemberCount"),
+  detailOwner: document.getElementById("detailOwner"),
+  tripStatus: document.getElementById("tripStatus"),
+  creatorLabel: document.getElementById("creatorLabel"),
+  balanceEmptyState: document.getElementById("balanceEmptyState"),
+  debtList: document.getElementById("debtList"),
+  summaryCurrencyLabel: document.getElementById("summaryCurrencyLabel"),
+  personSummaryList: document.getElementById("personSummaryList"),
+  baseCurrencySetting: document.getElementById("baseCurrencySetting"),
+  inviteLink: document.getElementById("inviteLink"),
+  desktopInviteLink: document.getElementById("desktopInviteLink"),
+  mobileTripSelect: document.getElementById("mobileTripSelect"),
+  bottomTripSelect: document.getElementById("bottomTripSelect"),
+  deleteTripBtn: document.getElementById("deleteTripBtn"),
+  leaveTripBtn: document.getElementById("leaveTripBtn"),
+  copyInviteBtn: document.getElementById("copyInviteBtn"),
+  settingsCopyInviteBtn: document.getElementById("settingsCopyInviteBtn"),
+  desktopCopyInviteBtn: document.getElementById("desktopCopyInviteBtn"),
+  newTripBtn: document.getElementById("newTripBtn"),
+  mobileNewTripBtn: document.getElementById("mobileNewTripBtn"),
+  emptyCreateBtn: document.getElementById("emptyCreateBtn"),
+  tripModal: document.getElementById("tripModal"),
+  tripForm: document.getElementById("tripForm"),
+  tripNameInput: document.getElementById("tripNameInput"),
+  currencyInput: document.getElementById("currencyInput"),
+  closeTripModalBtn: document.getElementById("closeTripModalBtn"),
+  cancelTripBtn: document.getElementById("cancelTripBtn"),
+  addExpenseBtn: document.getElementById("addExpenseBtn"),
+  expenseEmptyState: document.getElementById("expenseEmptyState"),
+  expenseList: document.getElementById("expenseList"),
+  expenseModal: document.getElementById("expenseModal"),
+  expenseForm: document.getElementById("expenseForm"),
+  expenseModalTitle: document.getElementById("expenseModalTitle"),
+  expenseDescriptionInput: document.getElementById("expenseDescriptionInput"),
+  expenseDateInput: document.getElementById("expenseDateInput"),
+  expenseAmountInput: document.getElementById("expenseAmountInput"),
+  expenseCurrencyInput: document.getElementById("expenseCurrencyInput"),
+  expensePaidByInput: document.getElementById("expensePaidByInput"),
+  includePayerInput: document.getElementById("includePayerInput"),
+  equalSplitBtn: document.getElementById("equalSplitBtn"),
+  customSplitBtn: document.getElementById("customSplitBtn"),
+  participantList: document.getElementById("participantList"),
+  customSplitPanel: document.getElementById("customSplitPanel"),
+  customSplitTotal: document.getElementById("customSplitTotal"),
+  customSplitList: document.getElementById("customSplitList"),
+  expenseFormError: document.getElementById("expenseFormError"),
+  closeExpenseModalBtn: document.getElementById("closeExpenseModalBtn"),
+  cancelExpenseBtn: document.getElementById("cancelExpenseBtn"),
+  saveExpenseBtn: document.getElementById("saveExpenseBtn"),
+  toast: document.getElementById("toast")
+};
+
+els.googleSignInBtn.addEventListener("click", signInWithGoogle);
+els.signOutBtn.addEventListener("click", () => auth.signOut());
+els.newTripBtn.addEventListener("click", openTripModal);
+els.mobileNewTripBtn.addEventListener("click", openTripModal);
+els.emptyCreateBtn.addEventListener("click", openTripModal);
+els.closeTripModalBtn.addEventListener("click", closeTripModal);
+els.cancelTripBtn.addEventListener("click", closeTripModal);
+els.tripForm.addEventListener("submit", createTrip);
+els.deleteTripBtn.addEventListener("click", deleteSelectedTrip);
+els.leaveTripBtn.addEventListener("click", leaveSelectedTrip);
+els.copyInviteBtn.addEventListener("click", copyCurrentInviteLink);
+els.settingsCopyInviteBtn.addEventListener("click", copyCurrentInviteLink);
+els.desktopCopyInviteBtn.addEventListener("click", copyCurrentInviteLink);
+els.mobileTripSelect.addEventListener("change", (event) => selectTrip(event.target.value));
+els.bottomTripSelect.addEventListener("change", (event) => selectTrip(event.target.value));
+els.baseCurrencySetting.addEventListener("change", changeBaseCurrency);
+els.addExpenseBtn.addEventListener("click", () => openExpenseModal());
+els.closeExpenseModalBtn.addEventListener("click", closeExpenseModal);
+els.cancelExpenseBtn.addEventListener("click", closeExpenseModal);
+els.expenseForm.addEventListener("submit", saveExpense);
+els.expensePaidByInput.addEventListener("change", syncPayerParticipant);
+els.includePayerInput.addEventListener("change", syncPayerParticipant);
+els.expenseAmountInput.addEventListener("input", updateCustomSplitTotal);
+els.equalSplitBtn.addEventListener("click", () => setExpenseSplitMode("equal"));
+els.customSplitBtn.addEventListener("click", () => setExpenseSplitMode("custom"));
+
+document.querySelectorAll("[data-tab]").forEach((button) => {
+  button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+});
+
+auth.onAuthStateChanged(async (user) => {
+  state.user = user;
+  if (state.unsubscribeTrips) {
+    state.unsubscribeTrips();
+    state.unsubscribeTrips = null;
+  }
+  if (state.unsubscribeExpenses) {
+    state.unsubscribeExpenses();
+    state.unsubscribeExpenses = null;
+  }
+
+  if (!user) {
+    state.trips = [];
+    state.expenses = [];
+    state.memberProfiles = {};
+    state.selectedTripId = null;
+    showLanding();
+    render();
+    return;
+  }
+
+  await saveUserProfile(user);
+  showApp(user);
+  await joinPendingInvite();
+  subscribeToTrips(user.uid);
+});
+
+async function signInWithGoogle() {
+  try {
+    await auth.signInWithPopup(googleProvider);
+  } catch (error) {
+    showToast(error.message || "Google sign-in failed.");
+  }
+}
+
+async function saveUserProfile(user) {
+  const userRef = db.collection("users").doc(user.uid);
+  const snapshot = await userRef.get();
+
+  if (!snapshot.exists) {
+    await userRef.set({
+      displayName: user.displayName || "",
+      email: user.email || "",
+      photoURL: user.photoURL || "",
+      createdAt: FieldValue.serverTimestamp()
+    });
+  }
+}
+
+async function joinPendingInvite() {
+  if (!state.pendingInviteTripId || !state.user) return;
+
+  const tripRef = db.collection("trips").doc(state.pendingInviteTripId);
+  const tripDoc = await tripRef.get();
+
+  if (!tripDoc.exists) {
+    showToast("That invite link does not match an active trip.");
+    clearInviteParam();
+    return;
+  }
+
+  await tripRef.update({
+    memberUids: FieldValue.arrayUnion(state.user.uid)
+  });
+
+  state.selectedTripId = state.pendingInviteTripId;
+  state.pendingInviteTripId = null;
+  clearInviteParam();
+  showToast("You joined the trip.");
+}
+
+function subscribeToTrips(uid) {
+  state.unsubscribeTrips = db
+    .collection("trips")
+    .where("memberUids", "array-contains", uid)
+    .onSnapshot(
+      async (snapshot) => {
+        const previousTripId = state.selectedTripId;
+        state.trips = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .sort((a, b) => getCreatedMillis(b) - getCreatedMillis(a));
+
+        if (!state.trips.some((trip) => trip.id === state.selectedTripId)) {
+          state.selectedTripId = state.trips[0]?.id || null;
+        }
+
+        if (previousTripId !== state.selectedTripId || !state.unsubscribeExpenses) {
+          subscribeToExpenses();
+        }
+
+        await loadMemberProfiles();
+        render();
+      },
+      (error) => {
+        showToast(error.message || "Could not load trips.");
+      }
+    );
+}
+
+function subscribeToExpenses() {
+  if (state.unsubscribeExpenses) {
+    state.unsubscribeExpenses();
+    state.unsubscribeExpenses = null;
+  }
+
+  state.expenses = [];
+  if (!state.selectedTripId) {
+    renderExpenses();
+    return;
+  }
+
+  state.unsubscribeExpenses = db
+    .collection("trips")
+    .doc(state.selectedTripId)
+    .collection("expenses")
+    .orderBy("date", "desc")
+    .onSnapshot(
+      (snapshot) => {
+        state.expenses = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        renderExpenses();
+        renderBalancesAndSummary();
+      },
+      (error) => {
+        showToast(error.message || "Could not load expenses.");
+      }
+    );
+}
+
+async function loadMemberProfiles() {
+  const trip = getSelectedTrip();
+  const uids = trip?.memberUids || [];
+  const profiles = {};
+
+  await Promise.all(
+    uids.map(async (uid) => {
+      if (uid === state.user?.uid) {
+        profiles[uid] = userProfileFromAuth(state.user);
+      }
+
+      try {
+        const doc = await db.collection("users").doc(uid).get();
+        if (doc.exists) {
+          profiles[uid] = { uid, ...doc.data() };
+        } else if (!profiles[uid]) {
+          profiles[uid] = fallbackProfile(uid);
+        }
+      } catch (error) {
+        if (!profiles[uid]) profiles[uid] = fallbackProfile(uid);
+      }
+    })
+  );
+
+  state.memberProfiles = profiles;
+}
+
+async function createTrip(event) {
+  event.preventDefault();
+  if (!state.user) return;
+
+  const name = els.tripNameInput.value.trim();
+  const baseCurrency = els.currencyInput.value;
+
+  if (!name) {
+    showToast("Enter a trip name.");
+    return;
+  }
+
+  if (!CURRENCIES.includes(baseCurrency)) {
+    showToast("Choose a supported currency.");
+    return;
+  }
+
+  try {
+    const docRef = await db.collection("trips").add({
+      name,
+      baseCurrency,
+      createdBy: state.user.uid,
+      createdAt: FieldValue.serverTimestamp(),
+      memberUids: [state.user.uid],
+      status: "active"
+    });
+
+    state.selectedTripId = docRef.id;
+    closeTripModal();
+    showToast("Trip created.");
+  } catch (error) {
+    showToast(error.message || "Could not create trip.");
+  }
+}
+
+async function deleteSelectedTrip() {
+  const trip = getSelectedTrip();
+  if (!trip || !state.user || trip.createdBy !== state.user.uid) return;
+
+  const confirmed = window.confirm(`Delete "${trip.name}"? This removes the trip for every member.`);
+  if (!confirmed) return;
+
+  try {
+    await db.collection("trips").doc(trip.id).delete();
+    showToast("Trip deleted.");
+  } catch (error) {
+    showToast(error.message || "Could not delete trip.");
+  }
+}
+
+async function leaveSelectedTrip() {
+  const trip = getSelectedTrip();
+  if (!trip || !state.user || trip.createdBy === state.user.uid) return;
+
+  const confirmed = window.confirm(`Leave "${trip.name}"?`);
+  if (!confirmed) return;
+
+  try {
+    await db.collection("trips").doc(trip.id).update({
+      memberUids: FieldValue.arrayRemove(state.user.uid)
+    });
+    showToast("You left the trip.");
+  } catch (error) {
+    showToast(error.message || "Could not leave trip.");
+  }
+}
+
+async function changeBaseCurrency(event) {
+  const trip = getSelectedTrip();
+  if (!trip || !state.user) return;
+
+  const nextCurrency = event.target.value;
+  const currentCurrency = trip.baseCurrency || "GBP";
+
+  if (nextCurrency === currentCurrency) return;
+  if (!CURRENCIES.includes(nextCurrency)) {
+    event.target.value = currentCurrency;
+    showToast("Choose a supported currency.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "This will shift how balances are displayed. Locked exchange rates on existing expenses will not change."
+  );
+
+  if (!confirmed) {
+    event.target.value = currentCurrency;
+    return;
+  }
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const tripRef = db.collection("trips").doc(trip.id);
+      const tripSnap = await transaction.get(tripRef);
+      if (!tripSnap.exists) throw new Error("Trip no longer exists.");
+      if (!(tripSnap.data().memberUids || []).includes(state.user.uid)) {
+        throw new Error("You are no longer a member of this trip.");
+      }
+
+      transaction.update(tripRef, { baseCurrency: nextCurrency });
+    });
+
+    showToast("Base currency updated.");
+  } catch (error) {
+    event.target.value = currentCurrency;
+    showToast(error.message || "Could not update base currency.");
+  }
+}
+
+async function saveExpense(event) {
+  event.preventDefault();
+  hideExpenseError();
+
+  const trip = getSelectedTrip();
+  if (!trip || !state.user) return;
+
+  const expenseInput = readExpenseForm(trip);
+  if (!expenseInput.ok) {
+    showExpenseError(expenseInput.message);
+    return;
+  }
+
+  els.saveExpenseBtn.disabled = true;
+  els.saveExpenseBtn.textContent = state.editingExpenseId ? "Saving..." : "Adding...";
+
+  try {
+    const conversion = await getExpenseConversion(
+      expenseInput.amount,
+      trip.baseCurrency,
+      expenseInput.originalCurrency
+    );
+    const splits = buildBaseCurrencySplits(expenseInput, conversion);
+    const expenseData = {
+      description: expenseInput.description,
+      date: expenseInput.date,
+      amount: expenseInput.amount,
+      originalCurrency: expenseInput.originalCurrency,
+      rateUsed: conversion.rateUsed,
+      convertedAmount: conversion.convertedAmount,
+      paidBy: expenseInput.paidBy,
+      splitMode: expenseInput.splitMode,
+      splits,
+      isSettlement: false,
+      lastEditedBy: state.user.uid,
+      lastEditedAt: FieldValue.serverTimestamp()
+    };
+
+    await db.runTransaction(async (transaction) => {
+      const tripRef = db.collection("trips").doc(trip.id);
+      const tripSnap = await transaction.get(tripRef);
+
+      if (!tripSnap.exists) throw new Error("Trip no longer exists.");
+
+      const liveTrip = tripSnap.data();
+      const liveMembers = liveTrip.memberUids || [];
+      const participantUids = Object.keys(expenseData.splits);
+
+      if (!liveMembers.includes(state.user.uid)) throw new Error("You are no longer a member of this trip.");
+      if (!liveMembers.includes(expenseData.paidBy)) throw new Error("The payer is no longer a trip member.");
+      if (participantUids.some((uid) => !liveMembers.includes(uid))) {
+        throw new Error("One or more split members are no longer in this trip.");
+      }
+
+      if (state.editingExpenseId) {
+        const expenseRef = tripRef.collection("expenses").doc(state.editingExpenseId);
+        transaction.update(expenseRef, expenseData);
+      } else {
+        const expenseRef = tripRef.collection("expenses").doc();
+        transaction.set(expenseRef, {
+          ...expenseData,
+          createdAt: FieldValue.serverTimestamp()
+        });
+      }
+    });
+
+    closeExpenseModal();
+    showToast(wasEditing ? "Expense updated." : "Expense added.");
+  } catch (error) {
+    const message =
+      error.message === "exchange-rate-failed"
+        ? "Could not fetch exchange rate. Check your connection and try again."
+        : error.message || "Could not save expense.";
+    showExpenseError(message);
+  } finally {
+    els.saveExpenseBtn.disabled = false;
+    els.saveExpenseBtn.textContent = "Save expense";
+  }
+}
+
+async function deleteExpense(expenseId) {
+  const trip = getSelectedTrip();
+  if (!trip || !state.user) return;
+
+  const expense = state.expenses.find((item) => item.id === expenseId);
+  const confirmed = window.confirm(`Delete "${expense?.description || "this expense"}"?`);
+  if (!confirmed) return;
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const tripRef = db.collection("trips").doc(trip.id);
+      const tripSnap = await transaction.get(tripRef);
+      if (!tripSnap.exists) throw new Error("Trip no longer exists.");
+      if (!(tripSnap.data().memberUids || []).includes(state.user.uid)) {
+        throw new Error("You are no longer a member of this trip.");
+      }
+      transaction.delete(tripRef.collection("expenses").doc(expenseId));
+    });
+
+    showToast("Expense deleted.");
+  } catch (error) {
+    showToast(error.message || "Could not delete expense.");
+  }
+}
+
+function readExpenseForm(trip) {
+  const description = els.expenseDescriptionInput.value.trim();
+  const date = els.expenseDateInput.value;
+  const amount = roundMoney(Number(els.expenseAmountInput.value));
+  const originalCurrency = els.expenseCurrencyInput.value;
+  const paidBy = els.expensePaidByInput.value;
+  const selectedParticipants = getSelectedParticipants();
+  const splitMode = state.expenseSplitMode;
+
+  if (!description) return { ok: false, message: "Enter a description." };
+  if (!date) return { ok: false, message: "Choose a date." };
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: "Enter a valid amount." };
+  if (!CURRENCIES.includes(originalCurrency)) return { ok: false, message: "Choose a supported currency." };
+  if (!(trip.memberUids || []).includes(paidBy)) return { ok: false, message: "Choose a trip member as payer." };
+  if (selectedParticipants.length < 2) return { ok: false, message: "Choose at least 2 members to split among." };
+
+  let originalCurrencySplits;
+  if (splitMode === "custom") {
+    originalCurrencySplits = readCustomSplits(selectedParticipants);
+    if (!originalCurrencySplits.ok) return originalCurrencySplits;
+  } else {
+    originalCurrencySplits = {
+      ok: true,
+      splits: splitEqualCents(toCents(amount), selectedParticipants)
+    };
+  }
+
+  return {
+    ok: true,
+    description,
+    date,
+    amount,
+    originalCurrency,
+    paidBy,
+    splitMode,
+    participantUids: selectedParticipants,
+    originalCurrencySplits: originalCurrencySplits.splits,
+    baseCurrency: trip.baseCurrency || "GBP"
+  };
+}
+
+function readCustomSplits(participantUids) {
+  const totalCents = toCents(Number(els.expenseAmountInput.value));
+  const splits = {};
+  let runningCents = 0;
+
+  for (const uid of participantUids) {
+    const input = els.customSplitList.querySelector(`[data-custom-share="${cssEscape(uid)}"]`);
+    const cents = toCents(Number(input?.value || 0));
+    if (cents < 0) {
+      return { ok: false, message: "Custom split amounts cannot be negative." };
+    }
+    splits[uid] = fromCents(cents);
+    runningCents += cents;
+  }
+
+  if (runningCents !== totalCents) {
+    return { ok: false, message: "Custom split amounts must sum to the total." };
+  }
+
+  return { ok: true, splits };
+}
+
+async function getExpenseConversion(amount, baseCurrency, originalCurrency) {
+  if (baseCurrency === originalCurrency) {
+    return {
+      rateUsed: 1,
+      convertedAmount: amount
+    };
+  }
+
+  try {
+    const url = `https://api.frankfurter.app/latest?from=${encodeURIComponent(baseCurrency)}&to=${encodeURIComponent(originalCurrency)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("exchange-rate-failed");
+
+    const data = await response.json();
+    const rate = Number(data?.rates?.[originalCurrency]);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error("exchange-rate-failed");
+
+    return {
+      rateUsed: rate,
+      convertedAmount: roundMoney(amount / rate)
+    };
+  } catch (error) {
+    throw new Error("exchange-rate-failed");
+  }
+}
+
+function buildBaseCurrencySplits(expenseInput, conversion) {
+  const splitEntries = Object.entries(expenseInput.originalCurrencySplits);
+  const convertedTotalCents = toCents(conversion.convertedAmount);
+
+  if (expenseInput.originalCurrency === expenseInput.baseCurrency) {
+    return Object.fromEntries(splitEntries.map(([uid, value]) => [uid, roundMoney(value)]));
+  }
+
+  if (expenseInput.splitMode === "equal") {
+    return splitEqualCents(convertedTotalCents, expenseInput.participantUids);
+  }
+
+  const baseSplits = {};
+  let assignedCents = 0;
+
+  splitEntries.forEach(([uid, originalShare], index) => {
+    let cents = toCents(roundMoney(originalShare / conversion.rateUsed));
+    if (index === splitEntries.length - 1) {
+      cents = convertedTotalCents - assignedCents;
+    }
+    baseSplits[uid] = fromCents(cents);
+    assignedCents += cents;
+  });
+
+  return baseSplits;
+}
+
+function splitEqualCents(totalCents, participantUids) {
+  const baseShare = Math.floor(totalCents / participantUids.length);
+  const remainder = totalCents - baseShare * participantUids.length;
+  const winnerIndex = remainder > 0 ? Math.floor(Math.random() * participantUids.length) : -1;
+  const splits = {};
+
+  participantUids.forEach((uid, index) => {
+    splits[uid] = fromCents(baseShare + (index === winnerIndex ? remainder : 0));
+  });
+
+  return splits;
+}
+
+function render() {
+  const trip = getSelectedTrip();
+
+  renderTripList();
+  renderTripSelects();
+  renderDashboard(trip);
+  renderExpenses();
+  renderBalancesAndSummary();
+  setActiveTab(state.activeTab);
+}
+
+function renderTripList() {
+  els.tripList.innerHTML = "";
+
+  state.trips.forEach((trip) => {
+    const button = document.createElement("button");
+    button.className = `trip-item${trip.id === state.selectedTripId ? " is-active" : ""}`;
+    button.type = "button";
+    button.addEventListener("click", () => selectTrip(trip.id));
+
+    const name = document.createElement("strong");
+    name.textContent = trip.name || "Untitled trip";
+
+    const meta = document.createElement("span");
+    meta.textContent = `${trip.baseCurrency || ""} - ${(trip.memberUids || []).length} member${(trip.memberUids || []).length === 1 ? "" : "s"}`;
+
+    button.append(name, meta);
+    els.tripList.append(button);
+  });
+}
+
+function renderTripSelects() {
+  [els.mobileTripSelect, els.bottomTripSelect].forEach((select) => {
+    select.innerHTML = "";
+
+    if (!state.trips.length) {
+      const option = document.createElement("option");
+      option.textContent = "No trips";
+      option.value = "";
+      select.append(option);
+      return;
+    }
+
+    state.trips.forEach((trip) => {
+      const option = document.createElement("option");
+      option.value = trip.id;
+      option.textContent = trip.name || "Untitled trip";
+      option.selected = trip.id === state.selectedTripId;
+      select.append(option);
+    });
+  });
+}
+
+function renderDashboard(trip) {
+  if (!trip) {
+    els.emptyState.classList.remove("is-hidden");
+    els.tripDashboard.classList.add("is-hidden");
+    els.mobileTripTitle.textContent = "Dashboard";
+    return;
+  }
+
+  const inviteUrl = getInviteUrl(trip.id);
+  const isCreator = trip.createdBy === state.user?.uid;
+  const memberTotal = (trip.memberUids || []).length;
+
+  els.emptyState.classList.add("is-hidden");
+  els.tripDashboard.classList.remove("is-hidden");
+  els.tripName.textContent = trip.name || "Untitled trip";
+  els.tripCurrency.textContent = `${trip.baseCurrency || "GBP"} base currency`;
+  els.mobileTripTitle.textContent = trip.name || "Dashboard";
+  els.memberCount.textContent = String(memberTotal);
+  els.detailMemberCount.textContent = `${memberTotal} ${memberTotal === 1 ? "person" : "people"}`;
+  els.detailOwner.textContent = isCreator ? "You created this trip." : "You are a member of this trip.";
+  els.tripStatus.textContent = trip.status || "active";
+  els.creatorLabel.textContent = isCreator ? "Creator" : "Member";
+  els.baseCurrencySetting.value = trip.baseCurrency || "GBP";
+  els.inviteLink.value = inviteUrl;
+  els.desktopInviteLink.value = inviteUrl;
+  els.deleteTripBtn.classList.toggle("is-hidden", !isCreator);
+  els.leaveTripBtn.classList.toggle("is-hidden", isCreator);
+}
+
+function renderExpenses() {
+  if (!els.expenseList || !els.expenseEmptyState) return;
+
+  els.expenseList.innerHTML = "";
+  els.expenseEmptyState.classList.toggle("is-hidden", state.expenses.length > 0);
+
+  state.expenses.forEach((expense) => {
+    els.expenseList.append(createExpenseCard(expense));
+  });
+}
+
+function renderBalancesAndSummary() {
+  if (!els.debtList || !els.personSummaryList) return;
+
+  const trip = getSelectedTrip();
+  const result = calculateBalances(trip, state.expenses);
+  const baseCurrency = trip?.baseCurrency || "GBP";
+
+  renderDebtList(result.debts, baseCurrency);
+  renderPersonSummary(result.summary, baseCurrency);
+}
+
+function calculateBalances(trip, documents) {
+  const memberUids = trip?.memberUids || [];
+  const summary = {};
+
+  memberUids.forEach((uid) => {
+    summary[uid] = {
+      uid,
+      paidOut: 0,
+      shareOwed: 0,
+      settled: 0,
+      net: 0
+    };
+  });
+
+  documents.forEach((doc) => {
+    if (doc.isSettlement) {
+      applySettlement(summary, doc);
+      return;
+    }
+
+    const amount = roundMoney(doc.convertedAmount || 0);
+    if (summary[doc.paidBy]) {
+      summary[doc.paidBy].paidOut = roundMoney(summary[doc.paidBy].paidOut + amount);
+      summary[doc.paidBy].net = roundMoney(summary[doc.paidBy].net + amount);
+    }
+
+    Object.entries(doc.splits || {}).forEach(([uid, share]) => {
+      const value = roundMoney(share);
+      if (!summary[uid]) return;
+      summary[uid].shareOwed = roundMoney(summary[uid].shareOwed + value);
+      summary[uid].net = roundMoney(summary[uid].net - value);
+    });
+  });
+
+  const debts = simplifyDebts(summary);
+  return { summary, debts };
+}
+
+function applySettlement(summary, settlement) {
+  const paidBy = settlement.paidBy;
+  const amount = roundMoney(settlement.convertedAmount || settlement.amount || 0);
+  const recipients = settlement.splits && Object.keys(settlement.splits).length
+    ? Object.entries(settlement.splits)
+    : settlement.receivedBy || settlement.creditorUid || settlement.settledWith
+      ? [[settlement.receivedBy || settlement.creditorUid || settlement.settledWith, amount]]
+      : [];
+
+  if (summary[paidBy]) {
+    const totalPaid = recipients.reduce((sum, [, value]) => sum + roundMoney(value), 0) || amount;
+    summary[paidBy].settled = roundMoney(summary[paidBy].settled + totalPaid);
+    summary[paidBy].net = roundMoney(summary[paidBy].net + totalPaid);
+  }
+
+  recipients.forEach(([uid, value]) => {
+    const settlementAmount = roundMoney(value);
+    if (!summary[uid]) return;
+    summary[uid].settled = roundMoney(summary[uid].settled + settlementAmount);
+    summary[uid].net = roundMoney(summary[uid].net - settlementAmount);
+  });
+}
+
+function simplifyDebts(summary) {
+  const creditors = [];
+  const debtors = [];
+
+  Object.values(summary).forEach((member) => {
+    const cents = toCents(member.net);
+    if (cents > 0) creditors.push({ uid: member.uid, cents });
+    if (cents < 0) debtors.push({ uid: member.uid, cents: Math.abs(cents) });
+  });
+
+  creditors.sort((a, b) => b.cents - a.cents);
+  debtors.sort((a, b) => b.cents - a.cents);
+
+  const debts = [];
+  let debtorIndex = 0;
+  let creditorIndex = 0;
+
+  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+    const debtor = debtors[debtorIndex];
+    const creditor = creditors[creditorIndex];
+    const amountCents = Math.min(debtor.cents, creditor.cents);
+
+    if (amountCents > 0) {
+      debts.push({
+        debtorUid: debtor.uid,
+        creditorUid: creditor.uid,
+        amount: fromCents(amountCents)
+      });
+    }
+
+    debtor.cents -= amountCents;
+    creditor.cents -= amountCents;
+
+    if (debtor.cents === 0) debtorIndex += 1;
+    if (creditor.cents === 0) creditorIndex += 1;
+  }
+
+  return debts;
+}
+
+function renderDebtList(debts, baseCurrency) {
+  els.debtList.innerHTML = "";
+  els.balanceEmptyState.classList.toggle("is-hidden", debts.length > 0);
+
+  debts.forEach((debt) => {
+    const row = document.createElement("article");
+    row.className = "debt-row";
+
+    row.append(
+      createDebtPerson(debt.debtorUid, "owes"),
+      createDebtAmount(debt.amount, baseCurrency),
+      createDebtPerson(debt.creditorUid, "receives")
+    );
+
+    els.debtList.append(row);
+  });
+}
+
+function createDebtPerson(uid, label) {
+  const profile = getMemberProfile(uid);
+  const person = document.createElement("div");
+  person.className = "debt-person";
+  person.append(createAvatar(profile, "payer-avatar"));
+
+  const copy = document.createElement("div");
+  const name = document.createElement("strong");
+  name.textContent = displayName(profile);
+  const sub = document.createElement("span");
+  sub.textContent = label;
+  copy.append(name, sub);
+  person.append(copy);
+
+  return person;
+}
+
+function createDebtAmount(amount, baseCurrency) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "debt-amount";
+  const label = document.createElement("span");
+  label.textContent = "owes";
+  const value = document.createElement("strong");
+  value.textContent = `${formatMoney(amount)} ${baseCurrency}`;
+  wrapper.append(label, value);
+  return wrapper;
+}
+
+function renderPersonSummary(summary, baseCurrency) {
+  const trip = getSelectedTrip();
+  els.summaryCurrencyLabel.textContent = baseCurrency;
+  els.personSummaryList.innerHTML = "";
+
+  (trip?.memberUids || []).forEach((uid) => {
+    const member = summary[uid] || { uid, paidOut: 0, shareOwed: 0, settled: 0, net: 0 };
+    const profile = getMemberProfile(uid);
+    const card = document.createElement("article");
+    card.className = "person-summary-card";
+
+    const person = document.createElement("div");
+    person.className = "summary-person";
+    person.append(createAvatar(profile, "payer-avatar"));
+    const personCopy = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = displayName(profile);
+    const email = document.createElement("span");
+    email.textContent = profile.email || "Trip member";
+    personCopy.append(name, email);
+    person.append(personCopy);
+
+    card.append(
+      person,
+      createSummaryMetric("Paid out", member.paidOut, baseCurrency),
+      createSummaryMetric("Share owed", member.shareOwed, baseCurrency),
+      createSummaryMetric("Settled", member.settled, baseCurrency),
+      createSummaryMetric("Outstanding", member.net, baseCurrency, true)
+    );
+
+    els.personSummaryList.append(card);
+  });
+}
+
+function createSummaryMetric(label, value, baseCurrency, signed = false) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "summary-metric";
+  const labelEl = document.createElement("span");
+  labelEl.textContent = label;
+  const valueEl = document.createElement("strong");
+  valueEl.textContent = `${signed ? formatSignedMoney(value) : formatMoney(value)} ${baseCurrency}`;
+  valueEl.classList.toggle("positive", signed && toCents(value) > 0);
+  valueEl.classList.toggle("negative", signed && toCents(value) < 0);
+  wrapper.append(labelEl, valueEl);
+  return wrapper;
+}
+
+function createExpenseCard(expense) {
+  const trip = getSelectedTrip();
+  const baseCurrency = trip?.baseCurrency || "GBP";
+  const payer = getMemberProfile(expense.paidBy);
+  const participants = Object.keys(expense.splits || {}).map(getMemberProfile);
+  const card = document.createElement("article");
+  card.className = "expense-card";
+
+  const header = document.createElement("div");
+  header.className = "expense-card-header";
+
+  const titleBlock = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = expense.description || "Untitled expense";
+  const date = document.createElement("div");
+  date.className = "expense-date";
+  date.textContent = formatDate(expense.date);
+  titleBlock.append(title, date);
+
+  const amountBlock = document.createElement("div");
+  amountBlock.className = "expense-amounts";
+  const original = document.createElement("strong");
+  original.textContent = `${formatMoney(expense.amount)} ${expense.originalCurrency}`;
+  const converted = document.createElement("span");
+  converted.textContent = `${formatMoney(expense.convertedAmount)} ${baseCurrency}`;
+  amountBlock.append(original, converted);
+  header.append(titleBlock, amountBlock);
+
+  const meta = document.createElement("div");
+  meta.className = "expense-meta-row";
+  const payerLine = document.createElement("div");
+  payerLine.className = "payer-line";
+  payerLine.append(createAvatar(payer, "payer-avatar"));
+  const payerText = document.createElement("span");
+  payerText.textContent = `Paid by ${displayName(payer)}`;
+  payerLine.append(payerText);
+  meta.append(payerLine);
+
+  const rate = document.createElement("div");
+  rate.className = "expense-rate";
+  rate.textContent =
+    expense.originalCurrency === baseCurrency
+      ? `Rate locked: 1 ${baseCurrency} = 1 ${expense.originalCurrency} at time of entry`
+      : `Rate locked: 1 ${baseCurrency} = ${formatRate(expense.rateUsed)} ${expense.originalCurrency} at time of entry`;
+
+  const participantWrap = document.createElement("div");
+  participantWrap.className = "participant-chips";
+  participants.forEach((profile) => {
+    const chip = document.createElement("span");
+    chip.className = "participant-chip";
+    chip.append(createAvatar(profile, "participant-avatar"));
+    const label = document.createElement("span");
+    label.textContent = displayName(profile);
+    chip.append(label);
+    participantWrap.append(chip);
+  });
+
+  const edited = document.createElement("div");
+  edited.className = "expense-edited";
+  edited.textContent = `Last edited by ${displayName(getMemberProfile(expense.lastEditedBy))} at ${formatTimestamp(expense.lastEditedAt)}`;
+
+  const actions = document.createElement("div");
+  actions.className = "expense-actions";
+  const editButton = document.createElement("button");
+  editButton.className = "small-btn";
+  editButton.type = "button";
+  editButton.textContent = "Edit";
+  editButton.addEventListener("click", () => openExpenseModal(expense));
+  const deleteButton = document.createElement("button");
+  deleteButton.className = "small-btn danger";
+  deleteButton.type = "button";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", () => deleteExpense(expense.id));
+  actions.append(editButton, deleteButton);
+
+  card.append(header, meta, rate, participantWrap, edited, actions);
+  return card;
+}
+
+function selectTrip(tripId) {
+  if (!tripId) return;
+  state.selectedTripId = tripId;
+  state.expenses = [];
+  subscribeToExpenses();
+  loadMemberProfiles().then(render);
+  render();
+}
+
+function setActiveTab(tabName) {
+  state.activeTab = tabName;
+
+  document.querySelectorAll(".tab-panel").forEach((panel) => {
+    panel.classList.toggle("is-hidden", panel.dataset.panel !== tabName);
+  });
+
+  document.querySelectorAll(".bottom-tab").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.tab === tabName);
+  });
+}
+
+function openTripModal() {
+  els.tripForm.reset();
+  els.currencyInput.value = "GBP";
+  els.tripModal.classList.remove("is-hidden");
+  window.setTimeout(() => els.tripNameInput.focus(), 0);
+}
+
+function closeTripModal() {
+  els.tripModal.classList.add("is-hidden");
+}
+
+function openExpenseModal(expense = null) {
+  const trip = getSelectedTrip();
+  if (!trip) return;
+
+  state.editingExpenseId = expense?.id || null;
+  state.expenseSplitMode = expense?.splitMode || "equal";
+
+  els.expenseForm.reset();
+  hideExpenseError();
+  els.expenseModalTitle.textContent = expense ? "Edit expense" : "Add expense";
+  els.expenseDescriptionInput.value = expense?.description || "";
+  els.expenseDateInput.value = expense?.date || new Date().toISOString().slice(0, 10);
+  els.expenseAmountInput.value = expense?.amount || "";
+  els.expenseCurrencyInput.value = expense?.originalCurrency || trip.baseCurrency || "GBP";
+  els.includePayerInput.checked = expense ? Boolean(expense.splits?.[expense.paidBy]) : true;
+
+  renderMemberInputs(expense);
+  setExpenseSplitMode(state.expenseSplitMode);
+  els.expenseModal.classList.remove("is-hidden");
+  window.setTimeout(() => els.expenseDescriptionInput.focus(), 0);
+}
+
+function closeExpenseModal() {
+  els.expenseModal.classList.add("is-hidden");
+  state.editingExpenseId = null;
+}
+
+function renderMemberInputs(expense = null) {
+  const trip = getSelectedTrip();
+  const memberUids = trip?.memberUids || [];
+
+  els.expensePaidByInput.innerHTML = "";
+  memberUids.forEach((uid) => {
+    const profile = getMemberProfile(uid);
+    const option = document.createElement("option");
+    option.value = uid;
+    option.textContent = displayName(profile);
+    option.selected = expense ? expense.paidBy === uid : uid === state.user?.uid;
+    els.expensePaidByInput.append(option);
+  });
+
+  els.participantList.innerHTML = "";
+  const selectedUids = expense ? Object.keys(expense.splits || {}) : memberUids;
+
+  memberUids.forEach((uid) => {
+    const profile = getMemberProfile(uid);
+    const label = document.createElement("label");
+    label.className = "member-option";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = uid;
+    checkbox.checked = selectedUids.includes(uid);
+    checkbox.addEventListener("change", () => {
+      syncPayerParticipant();
+      renderCustomShareInputs(expense);
+    });
+
+    const avatar = createAvatar(profile, "participant-avatar");
+    const copy = document.createElement("span");
+    copy.className = "member-name";
+    copy.textContent = displayName(profile);
+    const email = document.createElement("span");
+    email.className = "member-email";
+    email.textContent = profile.email || "";
+    copy.append(email);
+
+    label.append(checkbox, avatar, copy);
+    els.participantList.append(label);
+  });
+
+  syncPayerParticipant();
+  renderCustomShareInputs(expense);
+}
+
+function syncPayerParticipant() {
+  els.participantList.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+    checkbox.disabled = false;
+    checkbox.closest(".member-option")?.removeAttribute("aria-disabled");
+  });
+
+  const payerUid = els.expensePaidByInput.value;
+  const payerCheckbox = participantCheckbox(payerUid);
+  const payerOption = payerCheckbox?.closest(".member-option");
+
+  if (payerCheckbox && els.includePayerInput.checked) {
+    payerCheckbox.checked = true;
+    payerCheckbox.disabled = true;
+    payerOption?.setAttribute("aria-disabled", "true");
+  } else if (payerCheckbox) {
+    payerCheckbox.disabled = false;
+    payerOption?.removeAttribute("aria-disabled");
+  }
+
+  renderCustomShareInputs();
+  updateCustomSplitTotal();
+}
+
+function setExpenseSplitMode(mode) {
+  state.expenseSplitMode = mode;
+  els.equalSplitBtn.classList.toggle("is-active", mode === "equal");
+  els.customSplitBtn.classList.toggle("is-active", mode === "custom");
+  els.customSplitPanel.classList.toggle("is-hidden", mode !== "custom");
+  renderCustomShareInputs();
+  updateCustomSplitTotal();
+}
+
+function renderCustomShareInputs(expense = null) {
+  const previousValues = {};
+  els.customSplitList.querySelectorAll("[data-custom-share]").forEach((input) => {
+    previousValues[input.dataset.customShare] = input.value;
+  });
+
+  els.customSplitList.innerHTML = "";
+  getSelectedParticipants().forEach((uid) => {
+    const profile = getMemberProfile(uid);
+    const row = document.createElement("label");
+    row.className = "custom-share-row";
+
+    const label = document.createElement("span");
+    label.className = "member-name";
+    label.textContent = displayName(profile);
+
+    const input = document.createElement("input");
+    input.className = "text-input";
+    input.type = "number";
+    input.min = "0";
+    input.step = "0.01";
+    input.dataset.customShare = uid;
+    input.value = previousValues[uid] || customOriginalShareValue(expense, uid);
+    input.addEventListener("input", updateCustomSplitTotal);
+
+    row.append(label, input);
+    els.customSplitList.append(row);
+  });
+}
+
+function customOriginalShareValue(expense, uid) {
+  if (!expense || expense.splitMode !== "custom" || !expense.splits?.[uid]) return "";
+
+  if (expense.originalCurrency === getSelectedTrip()?.baseCurrency) {
+    return expense.splits[uid];
+  }
+
+  return roundMoney(expense.splits[uid] * expense.rateUsed);
+}
+
+function updateCustomSplitTotal() {
+  const amount = roundMoney(Number(els.expenseAmountInput.value || 0));
+  const running = Array.from(els.customSplitList.querySelectorAll("[data-custom-share]")).reduce(
+    (sum, input) => sum + toCents(Number(input.value || 0)),
+    0
+  );
+  els.customSplitTotal.textContent = `${formatMoney(fromCents(running))} / ${formatMoney(amount)}`;
+}
+
+async function copyCurrentInviteLink() {
+  const trip = getSelectedTrip();
+  if (!trip) return;
+
+  const inviteUrl = getInviteUrl(trip.id);
+
+  try {
+    await navigator.clipboard.writeText(inviteUrl);
+    showToast("Invite link copied.");
+  } catch (error) {
+    els.inviteLink.select();
+    document.execCommand("copy");
+    showToast("Invite link copied.");
+  }
+}
+
+function getSelectedParticipants() {
+  return Array.from(els.participantList.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value);
+}
+
+function participantCheckbox(uid) {
+  return els.participantList.querySelector(`input[value="${cssEscape(uid)}"]`);
+}
+
+function getSelectedTrip() {
+  return state.trips.find((trip) => trip.id === state.selectedTripId) || null;
+}
+
+function getInviteUrl(tripId) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.searchParams.set("tripId", tripId);
+  return url.toString();
+}
+
+function getCreatedMillis(trip) {
+  if (trip.createdAt?.toMillis) return trip.createdAt.toMillis();
+  return 0;
+}
+
+function clearInviteParam() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("tripId");
+  window.history.replaceState({}, document.title, url.toString());
+}
+
+function showLanding() {
+  els.landing.classList.remove("is-hidden");
+  els.app.classList.add("is-hidden");
+}
+
+function showApp(user) {
+  els.landing.classList.add("is-hidden");
+  els.app.classList.remove("is-hidden");
+  els.userPhoto.src = user.photoURL || "";
+  els.userPhoto.alt = user.displayName ? `${user.displayName} profile photo` : "Profile photo";
+  els.userName.textContent = user.displayName || "Signed-in user";
+  els.userEmail.textContent = user.email || "";
+}
+
+function getMemberProfile(uid) {
+  return state.memberProfiles[uid] || fallbackProfile(uid);
+}
+
+function userProfileFromAuth(user) {
+  return {
+    uid: user.uid,
+    displayName: user.displayName || "",
+    email: user.email || "",
+    photoURL: user.photoURL || ""
+  };
+}
+
+function fallbackProfile(uid) {
+  return {
+    uid,
+    displayName: uid === state.user?.uid ? state.user.displayName || "You" : "Trip member",
+    email: uid === state.user?.uid ? state.user.email || "" : "",
+    photoURL: uid === state.user?.uid ? state.user.photoURL || "" : ""
+  };
+}
+
+function displayName(profile) {
+  return profile?.displayName || profile?.email || "Trip member";
+}
+
+function createAvatar(profile, className) {
+  const img = document.createElement("img");
+  img.className = className;
+  img.alt = "";
+  img.src =
+    profile?.photoURL ||
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='32' fill='%23dfe8e4'/%3E%3Ccircle cx='32' cy='26' r='12' fill='%2392a19b'/%3E%3Cpath d='M14 58c3-11 12-18 18-18s15 7 18 18' fill='%2392a19b'/%3E%3C/svg%3E";
+  return img;
+}
+
+function formatMoney(value) {
+  return Number(value || 0).toFixed(2);
+}
+
+function formatSignedMoney(value) {
+  const cents = toCents(value);
+  if (cents === 0) return "0.00";
+  return `${cents > 0 ? "+" : "-"}${formatMoney(Math.abs(value))}`;
+}
+
+function formatRate(value) {
+  return Number(value || 0).toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatDate(value) {
+  if (!value) return "No date";
+  const date = new Date(`${value}T00:00:00`);
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatTimestamp(timestamp) {
+  const date = timestamp?.toDate ? timestamp.toDate() : null;
+  if (!date) return "just now";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function toCents(value) {
+  return Math.round(Number(value || 0) * 100);
+}
+
+function fromCents(cents) {
+  return roundMoney(cents / 100);
+}
+
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(value);
+  return String(value).replace(/"/g, '\\"');
+}
+
+function showExpenseError(message) {
+  els.expenseFormError.textContent = message;
+  els.expenseFormError.classList.remove("is-hidden");
+}
+
+function hideExpenseError() {
+  els.expenseFormError.textContent = "";
+  els.expenseFormError.classList.add("is-hidden");
+}
+
+let toastTimer = null;
+
+function showToast(message) {
+  window.clearTimeout(toastTimer);
+  els.toast.textContent = message;
+  els.toast.classList.remove("is-hidden");
+  toastTimer = window.setTimeout(() => els.toast.classList.add("is-hidden"), 3200);
+}

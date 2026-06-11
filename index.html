@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trip Split</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="landing" class="landing app-state">
+      <section class="landing-panel" aria-labelledby="landing-title">
+        <div class="brand-mark" aria-hidden="true">TS</div>
+        <p class="eyebrow">Shared trip spending</p>
+        <h1 id="landing-title">Trip Split</h1>
+        <p class="landing-copy">Create a trip, invite friends, and keep balances visible in the currency that matters.</p>
+        <button id="googleSignInBtn" class="primary-btn google-btn" type="button">
+          <span class="google-dot" aria-hidden="true"></span>
+          Sign in with Google
+        </button>
+      </section>
+    </main>
+
+    <main id="app" class="app-shell app-state is-hidden">
+      <aside class="sidebar" aria-label="Trips sidebar">
+        <div class="sidebar-top">
+          <div>
+            <p class="eyebrow">Trips</p>
+            <h2>Your dashboard</h2>
+          </div>
+          <button id="newTripBtn" class="icon-btn accent" type="button" aria-label="Create trip" title="Create trip">+</button>
+        </div>
+
+        <nav id="tripList" class="trip-list" aria-label="Trip list"></nav>
+
+        <div class="profile-strip">
+          <img id="userPhoto" class="avatar" alt="" />
+          <div class="profile-copy">
+            <strong id="userName"></strong>
+            <span id="userEmail"></span>
+          </div>
+          <button id="signOutBtn" class="text-btn" type="button">Sign out</button>
+        </div>
+      </aside>
+
+      <section class="mobile-topbar">
+        <div>
+          <p class="eyebrow">Trip Split</p>
+          <h2 id="mobileTripTitle">Dashboard</h2>
+        </div>
+        <button id="mobileNewTripBtn" class="icon-btn accent" type="button" aria-label="Create trip" title="Create trip">+</button>
+      </section>
+
+      <section class="content-grid">
+        <section class="primary-pane" aria-live="polite">
+          <div id="emptyState" class="empty-state">
+            <h2>No trips yet</h2>
+            <p>Create a trip to start sharing expenses with your group.</p>
+            <button id="emptyCreateBtn" class="primary-btn" type="button">Create trip</button>
+          </div>
+
+          <article id="tripDashboard" class="dashboard is-hidden">
+            <header class="trip-header">
+              <div>
+                <p id="tripCurrency" class="eyebrow"></p>
+                <h1 id="tripName"></h1>
+              </div>
+              <div class="header-actions">
+                <button id="copyInviteBtn" class="secondary-btn" type="button">Copy invite</button>
+                <button id="deleteTripBtn" class="danger-btn is-hidden" type="button">Delete trip</button>
+                <button id="leaveTripBtn" class="secondary-btn is-hidden" type="button">Leave trip</button>
+              </div>
+            </header>
+
+            <div id="tabPanels" class="tab-panels">
+              <section class="tab-panel" data-panel="expenses">
+                <div class="section-heading">
+                  <h2>Expenses</h2>
+                  <button id="addExpenseBtn" class="primary-btn" type="button">Add expense</button>
+                </div>
+                <div id="expenseEmptyState" class="inline-empty">
+                  <strong>No expenses yet</strong>
+                  <span>Add the first shared cost for this trip.</span>
+                </div>
+                <div id="expenseList" class="expense-list"></div>
+              </section>
+
+              <section class="tab-panel is-hidden" data-panel="balances">
+                <div class="section-heading">
+                  <h2>Balances</h2>
+                </div>
+                <div id="balanceEmptyState" class="balance-card">
+                  <span class="balance-amount">0.00</span>
+                  <p>No balances yet for this trip.</p>
+                </div>
+                <div id="debtList" class="debt-list"></div>
+              </section>
+
+              <section class="tab-panel is-hidden" data-panel="summary">
+                <div class="section-heading">
+                  <h2>Summary</h2>
+                </div>
+                <div class="summary-grid">
+                  <div>
+                    <span id="memberCount">0</span>
+                    <p>members</p>
+                  </div>
+                  <div>
+                    <span id="tripStatus">active</span>
+                    <p>status</p>
+                  </div>
+                  <div>
+                    <span id="creatorLabel">Owner</span>
+                    <p>your role</p>
+                  </div>
+                </div>
+                <div class="person-summary-panel">
+                  <div class="section-heading compact-heading">
+                    <h3>Per-person summary</h3>
+                    <span id="summaryCurrencyLabel">GBP</span>
+                  </div>
+                  <div id="personSummaryList" class="person-summary-list"></div>
+                </div>
+              </section>
+
+              <section class="tab-panel is-hidden" data-panel="settings">
+                <div class="section-heading">
+                  <h2>Settings</h2>
+                </div>
+                <label class="field-label" for="mobileTripSelect">Switch trip</label>
+                <select id="mobileTripSelect" class="select-input"></select>
+                <label class="field-label" for="baseCurrencySetting">Base currency</label>
+                <select id="baseCurrencySetting" class="select-input">
+                  <option value="GBP">GBP</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="MYR">MYR</option>
+                  <option value="JPY">JPY</option>
+                  <option value="THB">THB</option>
+                  <option value="AUD">AUD</option>
+                  <option value="CAD">CAD</option>
+                  <option value="SGD">SGD</option>
+                </select>
+                <label class="field-label" for="inviteLink">Invite link</label>
+                <div class="copy-row">
+                  <input id="inviteLink" class="text-input" type="text" readonly />
+                  <button id="settingsCopyInviteBtn" class="secondary-btn" type="button">Copy</button>
+                </div>
+              </section>
+            </div>
+          </article>
+        </section>
+
+        <aside class="detail-pane" aria-label="Trip details">
+          <div class="detail-card">
+            <p class="eyebrow">Invite</p>
+            <h2>Share this trip</h2>
+            <p>Anyone who signs in with this link joins the current trip automatically.</p>
+            <div class="copy-row">
+              <input id="desktopInviteLink" class="text-input" type="text" readonly />
+              <button id="desktopCopyInviteBtn" class="secondary-btn" type="button">Copy</button>
+            </div>
+          </div>
+
+          <div class="detail-card">
+            <p class="eyebrow">Members</p>
+            <h2 id="detailMemberCount">0 people</h2>
+            <p id="detailOwner"></p>
+          </div>
+        </aside>
+      </section>
+
+      <nav class="bottom-nav" aria-label="Mobile dashboard navigation">
+        <div class="mobile-trip-switcher">
+          <label for="bottomTripSelect">Trip</label>
+          <select id="bottomTripSelect"></select>
+        </div>
+        <div class="bottom-tabs">
+          <button class="bottom-tab is-active" type="button" data-tab="expenses">Expenses</button>
+          <button class="bottom-tab" type="button" data-tab="balances">Balances</button>
+          <button class="bottom-tab" type="button" data-tab="summary">Summary</button>
+          <button class="bottom-tab" type="button" data-tab="settings">Settings</button>
+        </div>
+      </nav>
+    </main>
+
+    <div id="tripModal" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="tripModalTitle">
+      <form id="tripForm" class="modal-card">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">New trip</p>
+            <h2 id="tripModalTitle">Create trip</h2>
+          </div>
+          <button id="closeTripModalBtn" class="icon-btn" type="button" aria-label="Close" title="Close">x</button>
+        </div>
+
+        <label class="field-label" for="tripNameInput">Trip name</label>
+        <input id="tripNameInput" class="text-input" name="tripName" type="text" maxlength="80" required autocomplete="off" />
+
+        <label class="field-label" for="currencyInput">Base currency</label>
+        <select id="currencyInput" class="select-input" name="baseCurrency" required>
+          <option value="GBP">GBP</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="MYR">MYR</option>
+          <option value="JPY">JPY</option>
+          <option value="THB">THB</option>
+          <option value="AUD">AUD</option>
+          <option value="CAD">CAD</option>
+          <option value="SGD">SGD</option>
+        </select>
+
+        <div class="modal-actions">
+          <button class="secondary-btn" type="button" id="cancelTripBtn">Cancel</button>
+          <button class="primary-btn" type="submit">Create trip</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="expenseModal" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle">
+      <form id="expenseForm" class="modal-card large-modal">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Expense</p>
+            <h2 id="expenseModalTitle">Add expense</h2>
+          </div>
+          <button id="closeExpenseModalBtn" class="icon-btn" type="button" aria-label="Close" title="Close">x</button>
+        </div>
+
+        <label class="field-label" for="expenseDescriptionInput">Description</label>
+        <input id="expenseDescriptionInput" class="text-input" type="text" maxlength="100" required autocomplete="off" />
+
+        <div class="form-grid">
+          <div>
+            <label class="field-label" for="expenseDateInput">Date</label>
+            <input id="expenseDateInput" class="text-input" type="date" required />
+          </div>
+          <div>
+            <label class="field-label" for="expenseAmountInput">Total amount</label>
+            <input id="expenseAmountInput" class="text-input" type="number" min="0.01" step="0.01" required />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div>
+            <label class="field-label" for="expenseCurrencyInput">Currency</label>
+            <select id="expenseCurrencyInput" class="select-input" required>
+              <option value="GBP">GBP</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="MYR">MYR</option>
+              <option value="JPY">JPY</option>
+              <option value="THB">THB</option>
+              <option value="AUD">AUD</option>
+              <option value="CAD">CAD</option>
+              <option value="SGD">SGD</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="expensePaidByInput">Who paid</label>
+            <select id="expensePaidByInput" class="select-input" required></select>
+          </div>
+        </div>
+
+        <div class="checkbox-line">
+          <input id="includePayerInput" type="checkbox" checked />
+          <label for="includePayerInput">Include payer in split</label>
+        </div>
+
+        <div class="split-toolbar" role="group" aria-label="Split mode">
+          <button id="equalSplitBtn" class="split-toggle is-active" type="button" data-mode="equal">Equal split</button>
+          <button id="customSplitBtn" class="split-toggle" type="button" data-mode="custom">Custom split</button>
+        </div>
+
+        <div class="field-label">Split among</div>
+        <div id="participantList" class="member-checklist"></div>
+
+        <div id="customSplitPanel" class="custom-split-panel is-hidden">
+          <div class="section-heading compact-heading">
+            <h3>Custom shares</h3>
+            <span id="customSplitTotal">0.00 / 0.00</span>
+          </div>
+          <div id="customSplitList" class="custom-split-list"></div>
+        </div>
+
+        <p id="expenseFormError" class="form-error is-hidden"></p>
+
+        <div class="modal-actions">
+          <button class="secondary-btn" type="button" id="cancelExpenseBtn">Cancel</button>
+          <button class="primary-btn" type="submit" id="saveExpenseBtn">Save expense</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="toast" class="toast is-hidden" role="status" aria-live="polite"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
