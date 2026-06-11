@@ -246,22 +246,31 @@ async function joinPendingInvite() {
   if (!state.pendingInviteTripId || !state.user) return;
 
   const tripRef = db.collection("trips").doc(state.pendingInviteTripId);
-  const tripDoc = await tripRef.get();
 
-  if (!tripDoc.exists) {
-    showToast("That invite link does not match an active trip.");
+  try {
+    const tripDoc = await tripRef.get();
+
+    if (!tripDoc.exists) {
+      showToast("That invite link does not match an active trip.");
+      state.pendingInviteTripId = null;
+      clearInviteParam();
+      return;
+    }
+
+    await tripRef.update({
+      memberUids: FieldValue.arrayUnion(state.user.uid)
+    });
+
+    // Keep pendingInviteTripId set so subscribeToTrips can select the trip
+    // once the snapshot confirms membership. clearInviteParam removes it from
+    // the URL only — state.pendingInviteTripId is cleared in the snapshot handler.
     clearInviteParam();
-    return;
+    showToast("You joined the trip.");
+  } catch (error) {
+    state.pendingInviteTripId = null;
+    clearInviteParam();
+    showToast(error.message || "Could not join trip.");
   }
-
-  await tripRef.update({
-    memberUids: FieldValue.arrayUnion(state.user.uid)
-  });
-
-  state.selectedTripId = state.pendingInviteTripId;
-  state.pendingInviteTripId = null;
-  clearInviteParam();
-  showToast("You joined the trip.");
 }
 
 function subscribeToTrips(uid) {
@@ -278,7 +287,10 @@ function subscribeToTrips(uid) {
           .map((doc) => ({ id: doc.id, ...doc.data() }))
           .sort((a, b) => getCreatedMillis(b) - getCreatedMillis(a));
 
-        if (!state.trips.some((trip) => trip.id === state.selectedTripId)) {
+        if (state.pendingInviteTripId && state.trips.some((trip) => trip.id === state.pendingInviteTripId)) {
+          state.selectedTripId = state.pendingInviteTripId;
+          state.pendingInviteTripId = null;
+        } else if (!state.trips.some((trip) => trip.id === state.selectedTripId)) {
           state.selectedTripId = state.trips[0]?.id || null;
         }
 
