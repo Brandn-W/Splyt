@@ -739,6 +739,10 @@ h3 {
   margin-top: 16px;
 }
 
+.mobile-actions-toggle {
+  display: none;
+}
+
 .mobile-profile-strip {
   display: none;
 }
@@ -1299,6 +1303,43 @@ h3 {
   .custom-share-row,
   .close-debt-actions {
     grid-template-columns: 1fr;
+  }
+
+  .mobile-actions-toggle {
+    display: inline-flex;
+  }
+
+  .header-actions {
+    position: relative;
+  }
+
+  .header-actions-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 15;
+    min-width: 200px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    flex-direction: column;
+  }
+
+  .header-actions-menu.is-open {
+    display: flex;
+  }
+
+  .header-actions-menu button {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    text-align: left;
+    justify-content: flex-start;
+  }
+
+  .header-actions-menu button:last-child {
+    border-bottom: none;
   }
 
   .mobile-profile-strip {

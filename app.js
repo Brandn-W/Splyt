@@ -79,6 +79,8 @@ const els = {
   bottomTripSelect: document.getElementById("bottomTripSelect"),
   deleteTripBtn: document.getElementById("deleteTripBtn"),
   leaveTripBtn: document.getElementById("leaveTripBtn"),
+  mobileActionsBtn: document.getElementById("mobileActionsBtn"),
+  headerActionsMenu: document.querySelector(".header-actions-menu"),
   copyInviteBtn: document.getElementById("copyInviteBtn"),
   exportCsvBtn: document.getElementById("exportCsvBtn"),
   copyBalanceSummaryBtn: document.getElementById("copyBalanceSummaryBtn"),
@@ -148,6 +150,16 @@ els.cancelTripBtn.addEventListener("click", closeTripModal);
 els.tripForm.addEventListener("submit", createTrip);
 els.deleteTripBtn.addEventListener("click", deleteSelectedTrip);
 els.leaveTripBtn.addEventListener("click", leaveSelectedTrip);
+els.mobileActionsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  els.headerActionsMenu.classList.toggle("is-open");
+});
+els.headerActionsMenu.addEventListener("click", () => {
+  els.headerActionsMenu.classList.remove("is-open");
+});
+document.addEventListener("click", () => {
+  els.headerActionsMenu.classList.remove("is-open");
+});
 els.copyInviteBtn.addEventListener("click", copyCurrentInviteLink);
 els.exportCsvBtn.addEventListener("click", exportTripCsv);
 els.copyBalanceSummaryBtn.addEventListener("click", copyBalanceSummary);
