@@ -532,7 +532,7 @@ async function changeBaseCurrency(event) {
   }
 
   const confirmed = window.confirm(
-    "This will recalculate all balances. Converted amounts already locked to expenses will not change, only the balance display currency will shift."
+    `This will convert every expense and settlement from ${currentCurrency} to ${nextCurrency} at today's exchange rate so all balances stay consistent in ${nextCurrency}. Original entered amounts and currencies are kept on each expense.`
   );
 
   if (!confirmed) {
@@ -540,23 +540,68 @@ async function changeBaseCurrency(event) {
     return;
   }
 
-  try {
-    await db.runTransaction(async (transaction) => {
-      const tripRef = db.collection("trips").doc(trip.id);
-      const tripSnap = await transaction.get(tripRef);
-      if (!tripSnap.exists) throw new Error("Trip no longer exists.");
-      if (!(tripSnap.data().memberUids || []).includes(state.user.uid)) {
-        throw new Error("You are no longer a member of this trip.");
-      }
+  event.target.disabled = true;
 
-      transaction.update(tripRef, { baseCurrency: nextCurrency });
+  try {
+    const crossRate = await fetchExchangeRate(currentCurrency, nextCurrency);
+    const tripRef = db.collection("trips").doc(trip.id);
+    const expensesSnap = await tripRef.collection("expenses").get();
+    const batch = db.batch();
+
+    expensesSnap.docs.forEach((docSnap) => {
+      batch.update(docSnap.ref, rebaseEntryToCurrency(docSnap.data(), currentCurrency, nextCurrency, crossRate));
     });
 
-    showToast("Base currency updated.");
+    batch.update(tripRef, { baseCurrency: nextCurrency });
+    await batch.commit();
+
+    showToast(`Base currency updated to ${nextCurrency}.`);
   } catch (error) {
     event.target.value = currentCurrency;
-    showToast(error.message || "Could not update base currency.");
+    showToast(
+      error.message === "exchange-rate-failed"
+        ? "Could not fetch the exchange rate. Base currency unchanged."
+        : error.message || "Could not update base currency."
+    );
+  } finally {
+    event.target.disabled = false;
   }
+}
+
+function rebaseEntryToCurrency(entry, currentCurrency, nextCurrency, crossRate) {
+  const oldConverted = getBaseAmountForDocument(entry, { baseCurrency: currentCurrency });
+  const newConverted = entry.originalCurrency === nextCurrency
+    ? roundMoney(entry.amount || 0)
+    : roundMoney(oldConverted * crossRate);
+
+  const updates = {
+    convertedAmount: newConverted,
+    rateUsed: newConverted > 0 ? (entry.amount || newConverted) / newConverted : 1
+  };
+
+  const uids = Object.keys(entry.splits || {});
+  if (uids.length) {
+    const newTotalCents = toCents(newConverted);
+    const oldTotalCents = uids.reduce((sum, uid) => sum + toCents(entry.splits[uid]), 0);
+
+    if (oldTotalCents <= 0) {
+      updates.splits = splitEqualCents(newTotalCents, uids);
+    } else {
+      const splits = {};
+      let assignedCents = 0;
+
+      uids.forEach((uid, index) => {
+        let cents = Math.round((toCents(entry.splits[uid]) * newTotalCents) / oldTotalCents);
+        if (index === uids.length - 1) cents = newTotalCents - assignedCents;
+        splits[uid] = fromCents(cents);
+        assignedCents += cents;
+      });
+
+      updates.splits = splits;
+    }
+  }
+
+  return updates;
 }
 
 async function saveExpense(event) {
@@ -768,6 +813,22 @@ function readCustomSplits(participantUids) {
   return { ok: true, splits };
 }
 
+async function fetchExchangeRate(fromCurrency, toCurrency) {
+  try {
+    const url = `https://api.frankfurter.dev/v1/latest?from=${encodeURIComponent(fromCurrency)}&to=${encodeURIComponent(toCurrency)}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("exchange-rate-failed");
+
+    const data = await response.json();
+    const rate = Number(data?.rates?.[toCurrency]);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error("exchange-rate-failed");
+
+    return rate;
+  } catch (error) {
+    throw new Error("exchange-rate-failed");
+  }
+}
+
 async function getExpenseConversion(amount, baseCurrency, originalCurrency) {
   if (baseCurrency === originalCurrency) {
     return {
@@ -776,22 +837,11 @@ async function getExpenseConversion(amount, baseCurrency, originalCurrency) {
     };
   }
 
-  try {
-    const url = `https://api.frankfurter.dev/v1/latest?from=${encodeURIComponent(baseCurrency)}&to=${encodeURIComponent(originalCurrency)}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("exchange-rate-failed");
-
-    const data = await response.json();
-    const rate = Number(data?.rates?.[originalCurrency]);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error("exchange-rate-failed");
-
-    return {
-      rateUsed: rate,
-      convertedAmount: roundMoney(amount / rate)
-    };
-  } catch (error) {
-    throw new Error("exchange-rate-failed");
-  }
+  const rate = await fetchExchangeRate(baseCurrency, originalCurrency);
+  return {
+    rateUsed: rate,
+    convertedAmount: roundMoney(amount / rate)
+  };
 }
 
 function buildBaseCurrencySplits(expenseInput, conversion) {
