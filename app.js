@@ -27,6 +27,11 @@ const state = {
   activeTab: "expenses",
   expenseSplitMode: "equal",
   editingExpenseId: null,
+  editingExpenseLastEditedMillis: null,
+  settlementDebt: null,
+  settlementMode: "full",
+  tripsLoading: false,
+  expensesLoading: false,
   unsubscribeTrips: null,
   unsubscribeExpenses: null,
   pendingInviteTripId: new URLSearchParams(window.location.search).get("tripId")
@@ -51,11 +56,19 @@ const els = {
   detailOwner: document.getElementById("detailOwner"),
   tripStatus: document.getElementById("tripStatus"),
   creatorLabel: document.getElementById("creatorLabel"),
+  detailMemberList: document.getElementById("detailMemberList"),
+  balanceStats: document.getElementById("balanceStats"),
   balanceEmptyState: document.getElementById("balanceEmptyState"),
+  balanceEmptyMessage: document.getElementById("balanceEmptyMessage"),
+  settleFirstDebtBtn: document.getElementById("settleFirstDebtBtn"),
   debtList: document.getElementById("debtList"),
   summaryCurrencyLabel: document.getElementById("summaryCurrencyLabel"),
   personSummaryList: document.getElementById("personSummaryList"),
   baseCurrencySetting: document.getElementById("baseCurrencySetting"),
+  closeTripBtn: document.getElementById("closeTripBtn"),
+  reopenTripBtn: document.getElementById("reopenTripBtn"),
+  memberManagementPanel: document.getElementById("memberManagementPanel"),
+  settingsMemberList: document.getElementById("settingsMemberList"),
   inviteLink: document.getElementById("inviteLink"),
   desktopInviteLink: document.getElementById("desktopInviteLink"),
   mobileTripSelect: document.getElementById("mobileTripSelect"),
@@ -63,6 +76,8 @@ const els = {
   deleteTripBtn: document.getElementById("deleteTripBtn"),
   leaveTripBtn: document.getElementById("leaveTripBtn"),
   copyInviteBtn: document.getElementById("copyInviteBtn"),
+  exportCsvBtn: document.getElementById("exportCsvBtn"),
+  copyBalanceSummaryBtn: document.getElementById("copyBalanceSummaryBtn"),
   settingsCopyInviteBtn: document.getElementById("settingsCopyInviteBtn"),
   desktopCopyInviteBtn: document.getElementById("desktopCopyInviteBtn"),
   newTripBtn: document.getElementById("newTripBtn"),
@@ -72,9 +87,11 @@ const els = {
   tripForm: document.getElementById("tripForm"),
   tripNameInput: document.getElementById("tripNameInput"),
   currencyInput: document.getElementById("currencyInput"),
+  tripFormError: document.getElementById("tripFormError"),
   closeTripModalBtn: document.getElementById("closeTripModalBtn"),
   cancelTripBtn: document.getElementById("cancelTripBtn"),
   addExpenseBtn: document.getElementById("addExpenseBtn"),
+  expenseLoadStatus: document.getElementById("expenseLoadStatus"),
   expenseEmptyState: document.getElementById("expenseEmptyState"),
   expenseList: document.getElementById("expenseList"),
   expenseModal: document.getElementById("expenseModal"),
@@ -96,6 +113,23 @@ const els = {
   closeExpenseModalBtn: document.getElementById("closeExpenseModalBtn"),
   cancelExpenseBtn: document.getElementById("cancelExpenseBtn"),
   saveExpenseBtn: document.getElementById("saveExpenseBtn"),
+  settlementModal: document.getElementById("settlementModal"),
+  settlementForm: document.getElementById("settlementForm"),
+  settlementParties: document.getElementById("settlementParties"),
+  settlementOutstanding: document.getElementById("settlementOutstanding"),
+  settlementOutstandingLabel: document.getElementById("settlementOutstandingLabel"),
+  fullSettlementBtn: document.getElementById("fullSettlementBtn"),
+  partialSettlementBtn: document.getElementById("partialSettlementBtn"),
+  settlementAmountInput: document.getElementById("settlementAmountInput"),
+  settlementFormError: document.getElementById("settlementFormError"),
+  closeSettlementModalBtn: document.getElementById("closeSettlementModalBtn"),
+  cancelSettlementBtn: document.getElementById("cancelSettlementBtn"),
+  confirmSettlementBtn: document.getElementById("confirmSettlementBtn"),
+  closeTripModal: document.getElementById("closeTripModal"),
+  closeTripProgress: document.getElementById("closeTripProgress"),
+  closeTripProgressDetail: document.getElementById("closeTripProgressDetail"),
+  closeTripDebtList: document.getElementById("closeTripDebtList"),
+  closeCloseTripModalBtn: document.getElementById("closeCloseTripModalBtn"),
   toast: document.getElementById("toast")
 };
 
@@ -110,11 +144,16 @@ els.tripForm.addEventListener("submit", createTrip);
 els.deleteTripBtn.addEventListener("click", deleteSelectedTrip);
 els.leaveTripBtn.addEventListener("click", leaveSelectedTrip);
 els.copyInviteBtn.addEventListener("click", copyCurrentInviteLink);
+els.exportCsvBtn.addEventListener("click", exportTripCsv);
+els.copyBalanceSummaryBtn.addEventListener("click", copyBalanceSummary);
 els.settingsCopyInviteBtn.addEventListener("click", copyCurrentInviteLink);
 els.desktopCopyInviteBtn.addEventListener("click", copyCurrentInviteLink);
 els.mobileTripSelect.addEventListener("change", (event) => selectTrip(event.target.value));
 els.bottomTripSelect.addEventListener("change", (event) => selectTrip(event.target.value));
 els.baseCurrencySetting.addEventListener("change", changeBaseCurrency);
+els.closeTripBtn.addEventListener("click", openCloseTripModal);
+els.reopenTripBtn.addEventListener("click", reopenTrip);
+els.settleFirstDebtBtn.addEventListener("click", settleFirstOutstandingDebt);
 els.addExpenseBtn.addEventListener("click", () => openExpenseModal());
 els.closeExpenseModalBtn.addEventListener("click", closeExpenseModal);
 els.cancelExpenseBtn.addEventListener("click", closeExpenseModal);
@@ -124,6 +163,12 @@ els.includePayerInput.addEventListener("change", syncPayerParticipant);
 els.expenseAmountInput.addEventListener("input", updateCustomSplitTotal);
 els.equalSplitBtn.addEventListener("click", () => setExpenseSplitMode("equal"));
 els.customSplitBtn.addEventListener("click", () => setExpenseSplitMode("custom"));
+els.settlementForm.addEventListener("submit", confirmSettlement);
+els.closeSettlementModalBtn.addEventListener("click", closeSettlementModal);
+els.cancelSettlementBtn.addEventListener("click", closeSettlementModal);
+els.fullSettlementBtn.addEventListener("click", () => setSettlementMode("full"));
+els.partialSettlementBtn.addEventListener("click", () => setSettlementMode("partial"));
+els.closeCloseTripModalBtn.addEventListener("click", closeCloseTripModal);
 
 document.querySelectorAll("[data-tab]").forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tab));
@@ -145,6 +190,8 @@ auth.onAuthStateChanged(async (user) => {
     state.expenses = [];
     state.memberProfiles = {};
     state.selectedTripId = null;
+    state.tripsLoading = false;
+    state.expensesLoading = false;
     showLanding();
     render();
     return;
@@ -201,11 +248,14 @@ async function joinPendingInvite() {
 }
 
 function subscribeToTrips(uid) {
+  state.tripsLoading = true;
+  renderTripList();
   state.unsubscribeTrips = db
     .collection("trips")
     .where("memberUids", "array-contains", uid)
     .onSnapshot(
       async (snapshot) => {
+        state.tripsLoading = false;
         const previousTripId = state.selectedTripId;
         state.trips = snapshot.docs
           .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -223,6 +273,8 @@ function subscribeToTrips(uid) {
         render();
       },
       (error) => {
+        state.tripsLoading = false;
+        renderTripList();
         showToast(error.message || "Could not load trips.");
       }
     );
@@ -236,23 +288,38 @@ function subscribeToExpenses() {
 
   state.expenses = [];
   if (!state.selectedTripId) {
+    state.expensesLoading = false;
     renderExpenses();
+    renderBalancesAndSummary();
     return;
   }
+
+  state.expensesLoading = true;
+  renderExpenses();
+  renderBalancesAndSummary();
 
   state.unsubscribeExpenses = db
     .collection("trips")
     .doc(state.selectedTripId)
     .collection("expenses")
-    .orderBy("date", "desc")
     .onSnapshot(
       (snapshot) => {
-        state.expenses = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        state.expensesLoading = false;
+        state.expenses = snapshot.docs
+          .map((doc) => normalizeEntry({ id: doc.id, ...doc.data() }))
+          .sort(sortEntriesNewestFirst);
         renderExpenses();
         renderBalancesAndSummary();
       },
       (error) => {
+        state.expensesLoading = false;
+        state.expenses = [];
+        renderExpenses();
+        renderBalancesAndSummary();
         showToast(error.message || "Could not load expenses.");
+        if (els.expenseLoadStatus) {
+          els.expenseLoadStatus.textContent = `Could not load entries: ${error.message || "Firestore rejected the read."}`;
+        }
       }
     );
 }
@@ -287,17 +354,21 @@ async function loadMemberProfiles() {
 async function createTrip(event) {
   event.preventDefault();
   if (!state.user) return;
+  hideTripError();
+  clearTripValidation();
 
   const name = els.tripNameInput.value.trim();
   const baseCurrency = els.currencyInput.value;
 
   if (!name) {
-    showToast("Enter a trip name.");
+    markInvalid(els.tripNameInput);
+    showTripError("Enter a trip name.");
     return;
   }
 
   if (!CURRENCIES.includes(baseCurrency)) {
-    showToast("Choose a supported currency.");
+    markInvalid(els.currencyInput);
+    showTripError("Choose a supported currency.");
     return;
   }
 
@@ -323,6 +394,16 @@ async function deleteSelectedTrip() {
   const trip = getSelectedTrip();
   if (!trip || !state.user || trip.createdBy !== state.user.uid) return;
 
+  const { debts } = getCurrentBalanceResult();
+  if (debts.length > 0) {
+    const baseCurrency = trip.baseCurrency || "GBP";
+    const lines = debts
+      .map((d) => `• ${displayName(getMemberProfile(d.debtorUid))} owes ${displayName(getMemberProfile(d.creditorUid))} ${formatMoney(d.amount)} ${baseCurrency}`)
+      .join("\n");
+    window.alert(`Cannot delete "${trip.name}" — ${debts.length} unsettled debt${debts.length === 1 ? "" : "s"} remain:\n\n${lines}\n\nSettle all balances before deleting the trip.`);
+    return;
+  }
+
   const confirmed = window.confirm(`Delete "${trip.name}"? This removes the trip for every member.`);
   if (!confirmed) return;
 
@@ -337,6 +418,16 @@ async function deleteSelectedTrip() {
 async function leaveSelectedTrip() {
   const trip = getSelectedTrip();
   if (!trip || !state.user || trip.createdBy === state.user.uid) return;
+
+  const { summary } = getCurrentBalanceResult();
+  const myNet = roundMoney(summary[state.user.uid]?.net || 0);
+  const baseCurrency = trip.baseCurrency || "GBP";
+
+  if (toCents(Math.abs(myNet)) > 0) {
+    const direction = myNet > 0 ? `you are owed ${formatMoney(myNet)} ${baseCurrency}` : `you owe ${formatMoney(Math.abs(myNet))} ${baseCurrency}`;
+    window.alert(`Cannot leave "${trip.name}" — ${direction}. Settle all balances before leaving.`);
+    return;
+  }
 
   const confirmed = window.confirm(`Leave "${trip.name}"?`);
   if (!confirmed) return;
@@ -366,7 +457,7 @@ async function changeBaseCurrency(event) {
   }
 
   const confirmed = window.confirm(
-    "This will shift how balances are displayed. Locked exchange rates on existing expenses will not change."
+    "This will recalculate all balances. Converted amounts already locked to expenses will not change, only the balance display currency will shift."
   );
 
   if (!confirmed) {
@@ -396,6 +487,7 @@ async function changeBaseCurrency(event) {
 async function saveExpense(event) {
   event.preventDefault();
   hideExpenseError();
+  clearExpenseValidation();
 
   const trip = getSelectedTrip();
   if (!trip || !state.user) return;
@@ -449,6 +541,12 @@ async function saveExpense(event) {
 
       if (state.editingExpenseId) {
         const expenseRef = tripRef.collection("expenses").doc(state.editingExpenseId);
+        const expenseSnap = await transaction.get(expenseRef);
+        if (!expenseSnap.exists) throw new Error("edit-conflict");
+        const liveEditedMillis = getTimestampMillis(expenseSnap.data().lastEditedAt);
+        if (state.editingExpenseLastEditedMillis !== null && liveEditedMillis !== state.editingExpenseLastEditedMillis) {
+          throw new Error("edit-conflict");
+        }
         transaction.update(expenseRef, expenseData);
       } else {
         const expenseRef = tripRef.collection("expenses").doc();
@@ -460,13 +558,21 @@ async function saveExpense(event) {
     });
 
     closeExpenseModal();
-    showToast(wasEditing ? "Expense updated." : "Expense added.");
+    showToast("Expense saved.");
   } catch (error) {
     const message =
       error.message === "exchange-rate-failed"
         ? "Could not fetch exchange rate. Check your connection and try again."
+        : error.message === "edit-conflict"
+          ? "Edit conflict detected. This entry changed while you were editing."
         : error.message || "Could not save expense.";
     showExpenseError(message);
+    if (error.message === "exchange-rate-failed") {
+      showToast(message);
+    }
+    if (error.message === "edit-conflict") {
+      showToast("Edit conflict detected.");
+    }
   } finally {
     els.saveExpenseBtn.disabled = false;
     els.saveExpenseBtn.textContent = "Save expense";
@@ -478,7 +584,14 @@ async function deleteExpense(expenseId) {
   if (!trip || !state.user) return;
 
   const expense = state.expenses.find((item) => item.id === expenseId);
-  const confirmed = window.confirm(`Delete "${expense?.description || "this expense"}"?`);
+  if (!expense) return;
+
+  if (expense.isSettlement && !isSettlementParty(expense, state.user.uid)) {
+    showToast("Only either party involved can delete this settlement.");
+    return;
+  }
+
+  const confirmed = window.confirm(`Delete "${expense.description || "this entry"}"?`);
   if (!confirmed) return;
 
   try {
@@ -507,12 +620,29 @@ function readExpenseForm(trip) {
   const selectedParticipants = getSelectedParticipants();
   const splitMode = state.expenseSplitMode;
 
-  if (!description) return { ok: false, message: "Enter a description." };
-  if (!date) return { ok: false, message: "Choose a date." };
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: "Enter a valid amount." };
-  if (!CURRENCIES.includes(originalCurrency)) return { ok: false, message: "Choose a supported currency." };
-  if (!(trip.memberUids || []).includes(paidBy)) return { ok: false, message: "Choose a trip member as payer." };
-  if (selectedParticipants.length < 2) return { ok: false, message: "Choose at least 2 members to split among." };
+  if (!description) {
+    markInvalid(els.expenseDescriptionInput);
+    return { ok: false, message: "Enter a description." };
+  }
+  if (!date) {
+    markInvalid(els.expenseDateInput);
+    return { ok: false, message: "Choose a date." };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    markInvalid(els.expenseAmountInput);
+    return { ok: false, message: "Enter a valid amount." };
+  }
+  if (!CURRENCIES.includes(originalCurrency)) {
+    markInvalid(els.expenseCurrencyInput);
+    return { ok: false, message: "Choose a supported currency." };
+  }
+  if (!(trip.memberUids || []).includes(paidBy)) {
+    markInvalid(els.expensePaidByInput);
+    return { ok: false, message: "Choose a trip member as payer." };
+  }
+  if (selectedParticipants.length < 2) {
+    return { ok: false, message: "Choose at least 2 members to split among." };
+  }
 
   let originalCurrencySplits;
   if (splitMode === "custom") {
@@ -548,6 +678,7 @@ function readCustomSplits(participantUids) {
     const input = els.customSplitList.querySelector(`[data-custom-share="${cssEscape(uid)}"]`);
     const cents = toCents(Number(input?.value || 0));
     if (cents < 0) {
+      markInvalid(input);
       return { ok: false, message: "Custom split amounts cannot be negative." };
     }
     splits[uid] = fromCents(cents);
@@ -555,6 +686,7 @@ function readCustomSplits(participantUids) {
   }
 
   if (runningCents !== totalCents) {
+    els.customSplitList.querySelectorAll("[data-custom-share]").forEach((input) => markInvalid(input));
     return { ok: false, message: "Custom split amounts must sum to the total." };
   }
 
@@ -641,6 +773,11 @@ function render() {
 function renderTripList() {
   els.tripList.innerHTML = "";
 
+  if (state.tripsLoading) {
+    els.tripList.append(createSkeletonStack(3, "skeleton-row"));
+    return;
+  }
+
   state.trips.forEach((trip) => {
     const button = document.createElement("button");
     button.className = `trip-item${trip.id === state.selectedTripId ? " is-active" : ""}`;
@@ -701,34 +838,139 @@ function renderDashboard(trip) {
   els.detailMemberCount.textContent = `${memberTotal} ${memberTotal === 1 ? "person" : "people"}`;
   els.detailOwner.textContent = isCreator ? "You created this trip." : "You are a member of this trip.";
   els.tripStatus.textContent = trip.status || "active";
+  const statusLower = String(trip.status || "").toLowerCase();
+  els.tripStatus.classList.toggle("status-badge", statusLower === "settled" || statusLower === "closing");
   els.creatorLabel.textContent = isCreator ? "Creator" : "Member";
   els.baseCurrencySetting.value = trip.baseCurrency || "GBP";
+  els.closeTripBtn.classList.toggle("is-hidden", !isCreator || statusLower !== "active");
+  els.reopenTripBtn.classList.toggle("is-hidden", !isCreator || (statusLower !== "settled" && statusLower !== "closing"));
+  els.memberManagementPanel.classList.toggle("is-hidden", !isCreator);
   els.inviteLink.value = inviteUrl;
   els.desktopInviteLink.value = inviteUrl;
   els.deleteTripBtn.classList.toggle("is-hidden", !isCreator);
   els.leaveTripBtn.classList.toggle("is-hidden", isCreator);
+  renderMemberManagement(trip, isCreator);
 }
 
 function renderExpenses() {
   if (!els.expenseList || !els.expenseEmptyState) return;
 
   els.expenseList.innerHTML = "";
+  if (state.expensesLoading) {
+    els.expenseEmptyState.classList.add("is-hidden");
+    if (els.expenseLoadStatus) {
+      els.expenseLoadStatus.textContent = "Loading trip entries...";
+    }
+    els.expenseList.append(createSkeletonStack(3, "skeleton-card"));
+    return;
+  }
+
   els.expenseEmptyState.classList.toggle("is-hidden", state.expenses.length > 0);
+  if (els.expenseLoadStatus) {
+    els.expenseLoadStatus.textContent = "";
+  }
 
   state.expenses.forEach((expense) => {
     els.expenseList.append(createExpenseCard(expense));
   });
 }
 
+function createSkeletonStack(count, className) {
+  const stack = document.createElement("div");
+  stack.className = "skeleton-stack";
+
+  for (let index = 0; index < count; index += 1) {
+    const item = document.createElement("div");
+    item.className = className;
+    stack.append(item);
+  }
+
+  return stack;
+}
+
+function normalizeEntry(entry) {
+  const normalized = { ...entry };
+
+  if (normalized.isSettlement) {
+    normalized.payer = normalized.payer || normalized.paidBy;
+    normalized.recipient =
+      normalized.recipient ||
+      normalized.receivedBy ||
+      normalized.creditorUid ||
+      normalized.settledWith ||
+      Object.keys(normalized.splits || {})[0] ||
+      "";
+    normalized.amount = roundMoney(normalized.amount || normalized.convertedAmount || 0);
+    normalized.convertedAmount = roundMoney(normalized.convertedAmount || normalized.amount || 0);
+    normalized.date = normalized.date || dateStringFromTimestamp(normalized.createdAt);
+    normalized.settlementType = normalized.settlementType || "partial";
+  }
+
+  return normalized;
+}
+
+function sortEntriesNewestFirst(a, b) {
+  return getEntryTime(b) - getEntryTime(a);
+}
+
+function getEntryTime(entry) {
+  if (entry.date) return new Date(`${entry.date}T00:00:00`).getTime() || 0;
+  if (entry.createdAt?.toMillis) return entry.createdAt.toMillis();
+  return 0;
+}
+
 function renderBalancesAndSummary() {
   if (!els.debtList || !els.personSummaryList) return;
 
   const trip = getSelectedTrip();
-  const result = calculateBalances(trip, state.expenses);
+  const result = getCurrentBalanceResult();
   const baseCurrency = trip?.baseCurrency || "GBP";
 
   renderDebtList(result.debts, baseCurrency);
   renderPersonSummary(result.summary, baseCurrency);
+  if (!els.closeTripModal.classList.contains("is-hidden")) {
+    renderCloseTripModal();
+  }
+}
+
+function getCurrentBalanceResult(expenses = state.expenses, trip = getSelectedTrip()) {
+  return calculateBalances(trip, expenses);
+}
+
+function renderMemberManagement(trip, isCreator) {
+  [els.detailMemberList, els.settingsMemberList].forEach((list) => {
+    list.innerHTML = "";
+
+    (trip.memberUids || []).forEach((uid) => {
+      const profile = getMemberProfile(uid);
+      const row = document.createElement("div");
+      row.className = "member-management-row";
+      row.append(createAvatar(profile, "payer-avatar"));
+
+      const copy = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = displayName(profile);
+      const email = document.createElement("span");
+      email.textContent = uid === trip.createdBy ? "Creator" : profile.email || "Trip member";
+      copy.append(name, email);
+      row.append(copy);
+
+      if (isCreator && uid !== trip.createdBy) {
+        const removeButton = document.createElement("button");
+        removeButton.className = "small-btn danger";
+        removeButton.type = "button";
+        removeButton.textContent = "Remove";
+        removeButton.addEventListener("click", () => removeMember(uid));
+        row.append(removeButton);
+      } else {
+        const marker = document.createElement("span");
+        marker.textContent = uid === state.user?.uid ? "You" : "";
+        row.append(marker);
+      }
+
+      list.append(row);
+    });
+  });
 }
 
 function calculateBalances(trip, documents) {
@@ -751,7 +993,7 @@ function calculateBalances(trip, documents) {
       return;
     }
 
-    const amount = roundMoney(doc.convertedAmount || 0);
+    const amount = getBaseAmountForDocument(doc, trip);
     if (summary[doc.paidBy]) {
       summary[doc.paidBy].paidOut = roundMoney(summary[doc.paidBy].paidOut + amount);
       summary[doc.paidBy].net = roundMoney(summary[doc.paidBy].net + amount);
@@ -770,12 +1012,12 @@ function calculateBalances(trip, documents) {
 }
 
 function applySettlement(summary, settlement) {
-  const paidBy = settlement.paidBy;
+  const paidBy = settlement.payer || settlement.paidBy;
   const amount = roundMoney(settlement.convertedAmount || settlement.amount || 0);
   const recipients = settlement.splits && Object.keys(settlement.splits).length
     ? Object.entries(settlement.splits)
-    : settlement.receivedBy || settlement.creditorUid || settlement.settledWith
-      ? [[settlement.receivedBy || settlement.creditorUid || settlement.settledWith, amount]]
+    : settlement.recipient || settlement.receivedBy || settlement.creditorUid || settlement.settledWith
+      ? [[settlement.recipient || settlement.receivedBy || settlement.creditorUid || settlement.settledWith, amount]]
       : [];
 
   if (summary[paidBy]) {
@@ -832,9 +1074,38 @@ function simplifyDebts(summary) {
   return debts;
 }
 
+function getBaseAmountForDocument(doc, trip) {
+  if (Number.isFinite(Number(doc.convertedAmount))) {
+    return roundMoney(doc.convertedAmount);
+  }
+
+  const splitTotal = Object.values(doc.splits || {}).reduce((sum, value) => sum + roundMoney(value), 0);
+  if (splitTotal > 0) return roundMoney(splitTotal);
+
+  if (doc.originalCurrency === (trip?.baseCurrency || "GBP")) {
+    return roundMoney(doc.amount || 0);
+  }
+
+  return 0;
+}
+
 function renderDebtList(debts, baseCurrency) {
   els.debtList.innerHTML = "";
+  if (state.expensesLoading) {
+    els.balanceEmptyState.classList.add("is-hidden");
+    els.settleFirstDebtBtn.classList.add("is-hidden");
+    els.balanceStats.textContent = "Loading balances...";
+    els.debtList.append(createSkeletonStack(2, "skeleton-card"));
+    return;
+  }
+
   els.balanceEmptyState.classList.toggle("is-hidden", debts.length > 0);
+  els.settleFirstDebtBtn.classList.toggle("is-hidden", debts.length === 0);
+  els.balanceStats.textContent = `${state.expenses.length} expense${state.expenses.length === 1 ? "" : "s"} included - ${(getSelectedTrip()?.memberUids || []).length} member${(getSelectedTrip()?.memberUids || []).length === 1 ? "" : "s"}`;
+  els.balanceEmptyMessage.textContent =
+    state.expenses.length > 0
+      ? "Everyone is settled up based on the current expenses."
+      : "No balances yet for this trip.";
 
   debts.forEach((debt) => {
     const row = document.createElement("article");
@@ -843,11 +1114,353 @@ function renderDebtList(debts, baseCurrency) {
     row.append(
       createDebtPerson(debt.debtorUid, "owes"),
       createDebtAmount(debt.amount, baseCurrency),
-      createDebtPerson(debt.creditorUid, "receives")
+      createDebtPerson(debt.creditorUid, "receives"),
+      createDebtAction(debt)
     );
 
     els.debtList.append(row);
   });
+}
+
+function settleFirstOutstandingDebt() {
+  const { debts } = getCurrentBalanceResult();
+  if (!debts.length) {
+    showToast("There are no outstanding debts to settle.");
+    return;
+  }
+
+  openSettlementModal(debts[0], "full");
+}
+
+function createDebtAction(debt) {
+  const button = document.createElement("button");
+  button.className = "primary-btn";
+  button.type = "button";
+  button.textContent = "Settle up";
+  button.addEventListener("click", () => openSettlementModal(debt));
+  return button;
+}
+
+function openSettlementModal(debt, preferredMode = "full") {
+  const trip = getSelectedTrip();
+  if (!trip) return;
+
+  state.settlementDebt = { ...debt };
+  renderSettlementParties(debt);
+  els.settlementOutstanding.textContent = `${formatMoney(debt.amount)} ${trip.baseCurrency || "GBP"}`;
+  els.settlementOutstandingLabel.textContent = `${displayName(getMemberProfile(debt.debtorUid))} owes ${displayName(getMemberProfile(debt.creditorUid))}`;
+  els.settlementAmountInput.max = String(debt.amount);
+  els.settlementAmountInput.value = formatMoney(debt.amount);
+  hideSettlementError();
+  setSettlementMode(preferredMode);
+  els.settlementModal.classList.remove("is-hidden");
+}
+
+function closeSettlementModal() {
+  els.settlementModal.classList.add("is-hidden");
+  state.settlementDebt = null;
+}
+
+function renderSettlementParties(debt) {
+  els.settlementParties.innerHTML = "";
+  els.settlementParties.append(
+    createSettlementParty(debt.debtorUid, "payer"),
+    createSettlementArrow(),
+    createSettlementParty(debt.creditorUid, "recipient")
+  );
+}
+
+function createSettlementParty(uid, label) {
+  const profile = getMemberProfile(uid);
+  const party = document.createElement("div");
+  party.className = "settlement-party";
+  party.append(createAvatar(profile, "payer-avatar"));
+
+  const copy = document.createElement("div");
+  const name = document.createElement("strong");
+  name.textContent = displayName(profile);
+  const role = document.createElement("span");
+  role.textContent = label;
+  copy.append(name, role);
+  party.append(copy);
+  return party;
+}
+
+function createSettlementArrow() {
+  const arrow = document.createElement("div");
+  arrow.className = "settlement-arrow";
+  arrow.textContent = "pays";
+  return arrow;
+}
+
+function setSettlementMode(mode) {
+  const debt = state.settlementDebt;
+  state.settlementMode = mode;
+  els.fullSettlementBtn.classList.toggle("is-active", mode === "full");
+  els.partialSettlementBtn.classList.toggle("is-active", mode === "partial");
+  els.settlementAmountInput.readOnly = mode === "full";
+  if (mode === "full" && debt) {
+    els.settlementAmountInput.value = formatMoney(debt.amount);
+  }
+}
+
+async function confirmSettlement(event) {
+  event.preventDefault();
+  hideSettlementError();
+  clearSettlementValidation();
+
+  const trip = getSelectedTrip();
+  const debt = state.settlementDebt;
+  if (!trip || !debt || !state.user) return;
+
+  const amount = roundMoney(Number(els.settlementAmountInput.value));
+  const outstanding = roundMoney(debt.amount);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    markInvalid(els.settlementAmountInput);
+    showSettlementError("Enter a valid settlement amount.");
+    return;
+  }
+
+  if (amount > outstanding) {
+    markInvalid(els.settlementAmountInput);
+    showSettlementError("Settlement amount cannot exceed the outstanding amount.");
+    return;
+  }
+
+  els.confirmSettlementBtn.disabled = true;
+  els.confirmSettlementBtn.textContent = "Confirming...";
+
+  try {
+    await writeSettlementWithCheck(trip, debt, amount, state.settlementMode);
+    closeSettlementModal();
+    showToast("Settlement confirmed.");
+    if (!els.closeTripModal.classList.contains("is-hidden")) {
+      await markTripSettledIfNeeded(getSelectedTrip());
+    }
+  } catch (error) {
+    if (error.message?.startsWith("already-settled|")) {
+      const name = error.message.split("|")[1] || "someone";
+      showSettlementError(`This debt was already settled by ${name}.`);
+    } else {
+      showSettlementError(error.message || "Could not record settlement.");
+    }
+  } finally {
+    els.confirmSettlementBtn.disabled = false;
+    els.confirmSettlementBtn.textContent = "Confirm settlement";
+  }
+}
+
+async function writeSettlementWithCheck(trip, debt, amount, requestedType) {
+  const expenseSnapshot = await db.collection("trips").doc(trip.id).collection("expenses").get();
+  const expenseRefs = expenseSnapshot.docs.map((doc) => doc.ref);
+  const debtorName = displayName(getMemberProfile(debt.debtorUid));
+
+  await db.runTransaction(async (transaction) => {
+    const tripRef = db.collection("trips").doc(trip.id);
+    const tripSnap = await transaction.get(tripRef);
+    if (!tripSnap.exists) throw new Error("Trip no longer exists.");
+
+    const liveTrip = { id: trip.id, ...tripSnap.data() };
+    const liveMembers = liveTrip.memberUids || [];
+    if (!liveMembers.includes(state.user.uid)) throw new Error("You are no longer a member of this trip.");
+    if (!liveMembers.includes(debt.debtorUid) || !liveMembers.includes(debt.creditorUid)) {
+      throw new Error("One of these members is no longer in this trip.");
+    }
+
+    const liveExpenses = [];
+    for (const ref of expenseRefs) {
+      const doc = await transaction.get(ref);
+      if (doc.exists) liveExpenses.push({ id: doc.id, ...doc.data() });
+    }
+
+    const currentDebt = findDebtBetween(calculateBalances(liveTrip, liveExpenses).debts, debt.debtorUid, debt.creditorUid);
+    if (!currentDebt || toCents(currentDebt.amount) <= 0) {
+      throw new Error(`already-settled|${debtorName}`);
+    }
+
+    const amountCents = Math.min(toCents(amount), toCents(currentDebt.amount));
+    const settlementType = amountCents >= toCents(currentDebt.amount) ? "full" : requestedType;
+    const settlementAmount = fromCents(amountCents);
+    const settlementRef = tripRef.collection("expenses").doc();
+    const today = new Date().toISOString().slice(0, 10);
+
+    transaction.set(settlementRef, {
+      description: `${settlementType === "full" ? "Full" : "Partial"} settlement`,
+      isSettlement: true,
+      settlementType,
+      payer: debt.debtorUid,
+      recipient: debt.creditorUid,
+      paidBy: debt.debtorUid,
+      amount: settlementAmount,
+      convertedAmount: settlementAmount,
+      originalCurrency: liveTrip.baseCurrency || "GBP",
+      rateUsed: 1,
+      date: today,
+      splits: { [debt.creditorUid]: settlementAmount },
+      createdAt: FieldValue.serverTimestamp(),
+      lastEditedBy: state.user.uid,
+      lastEditedAt: FieldValue.serverTimestamp()
+    });
+  });
+}
+
+function findDebtBetween(debts, debtorUid, creditorUid) {
+  return debts.find((debt) => debt.debtorUid === debtorUid && debt.creditorUid === creditorUid) || null;
+}
+
+function isSettlementParty(entry, uid) {
+  return entry.payer === uid || entry.recipient === uid || entry.paidBy === uid;
+}
+
+async function openCloseTripModal() {
+  renderCloseTripModal();
+  els.closeTripModal.classList.remove("is-hidden");
+
+  const trip = getSelectedTrip();
+  if (!trip || trip.createdBy !== state.user?.uid) return;
+  const statusLower = String(trip.status || "").toLowerCase();
+  if (statusLower === "settled") return;
+
+  const { debts } = getCurrentBalanceResult();
+
+  try {
+    if (debts.length === 0 && statusLower !== "settled") {
+      await db.collection("trips").doc(trip.id).update({ status: "Settled" });
+    } else if (debts.length > 0 && statusLower !== "closing") {
+      await db.collection("trips").doc(trip.id).update({ status: "closing" });
+    }
+  } catch {
+    // non-critical — status display only
+  }
+}
+
+async function reopenTrip() {
+  const trip = getSelectedTrip();
+  if (!trip || trip.createdBy !== state.user?.uid) return;
+
+  const confirmed = window.confirm(`Reopen "${trip.name}"? The status will be reset to active.`);
+  if (!confirmed) return;
+
+  try {
+    await db.collection("trips").doc(trip.id).update({ status: "active" });
+    showToast("Trip reopened.");
+  } catch (error) {
+    showToast(error.message || "Could not reopen trip.");
+  }
+}
+
+function closeCloseTripModal() {
+  els.closeTripModal.classList.add("is-hidden");
+}
+
+function renderCloseTripModal() {
+  const trip = getSelectedTrip();
+  if (!trip) return;
+
+  const { debts } = getCurrentBalanceResult();
+  const baseCurrency = trip.baseCurrency || "GBP";
+  els.closeTripDebtList.innerHTML = "";
+  els.closeTripProgress.textContent = `${debts.length} debt${debts.length === 1 ? "" : "s"} remaining`;
+  els.closeTripProgressDetail.textContent =
+    debts.length === 0 ? "All balances are settled." : "Members confirm their own payments one by one.";
+
+  if (debts.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "inline-empty";
+    const strong = document.createElement("strong");
+    strong.textContent = "Trip settled";
+    const span = document.createElement("span");
+    span.textContent = "There are no outstanding balances.";
+    empty.append(strong, span);
+    els.closeTripDebtList.append(empty);
+    return;
+  }
+
+  debts.forEach((debt) => {
+    const row = document.createElement("article");
+    row.className = "close-debt-row";
+    row.append(
+      createDebtPerson(debt.debtorUid, "payer"),
+      createDebtAmount(debt.amount, baseCurrency),
+      createDebtPerson(debt.creditorUid, "recipient"),
+      createCloseDebtActions(debt)
+    );
+    els.closeTripDebtList.append(row);
+  });
+}
+
+function createCloseDebtActions(debt) {
+  const actions = document.createElement("div");
+  actions.className = "close-debt-actions";
+
+  const full = document.createElement("button");
+  full.className = "primary-btn";
+  full.type = "button";
+  full.textContent = "Full";
+  full.addEventListener("click", () => openSettlementModal(debt, "full"));
+
+  const partial = document.createElement("button");
+  partial.className = "secondary-btn";
+  partial.type = "button";
+  partial.textContent = "Partial";
+  partial.addEventListener("click", () => openSettlementModal(debt, "partial"));
+
+  actions.append(full, partial);
+  return actions;
+}
+
+async function markTripSettledIfNeeded(trip) {
+  if (!trip || trip.createdBy !== state.user?.uid) return;
+  if (String(trip.status || "").toLowerCase() !== "closing") return;
+
+  const { debts } = getCurrentBalanceResult();
+  if (debts.length > 0) return;
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const tripRef = db.collection("trips").doc(trip.id);
+      const tripSnap = await transaction.get(tripRef);
+      if (!tripSnap.exists) throw new Error("Trip no longer exists.");
+      if (tripSnap.data().createdBy !== state.user.uid) return;
+      if (String(tripSnap.data().status || "").toLowerCase() !== "closing") return;
+      transaction.update(tripRef, { status: "Settled" });
+    });
+  } catch (error) {
+    showToast(error.message || "Could not mark trip as settled.");
+  }
+}
+
+async function removeMember(uid) {
+  const trip = getSelectedTrip();
+  if (!trip || trip.createdBy !== state.user?.uid || uid === trip.createdBy) return;
+
+  const { summary } = getCurrentBalanceResult();
+  const outstanding = Math.abs(roundMoney(summary[uid]?.net || 0));
+  const profile = getMemberProfile(uid);
+
+  if (toCents(outstanding) > 0) {
+    showToast(`Cannot remove ${displayName(profile)} -- they have an outstanding balance of ${formatMoney(outstanding)} ${trip.baseCurrency || "GBP"}. Settle all debts first.`);
+    return;
+  }
+
+  const confirmed = window.confirm(`Remove ${displayName(profile)} from "${trip.name}"?`);
+  if (!confirmed) return;
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const tripRef = db.collection("trips").doc(trip.id);
+      const tripSnap = await transaction.get(tripRef);
+      if (!tripSnap.exists) throw new Error("Trip no longer exists.");
+      if (tripSnap.data().createdBy !== state.user.uid) throw new Error("Only the creator can remove members.");
+      transaction.update(tripRef, {
+        memberUids: FieldValue.arrayRemove(uid)
+      });
+    });
+    showToast(`${displayName(profile)} removed.`);
+  } catch (error) {
+    showToast(error.message || "Could not remove member.");
+  }
 }
 
 function createDebtPerson(uid, label) {
@@ -926,6 +1539,10 @@ function createSummaryMetric(label, value, baseCurrency, signed = false) {
 }
 
 function createExpenseCard(expense) {
+  if (expense.isSettlement) {
+    return createSettlementCard(expense);
+  }
+
   const trip = getSelectedTrip();
   const baseCurrency = trip?.baseCurrency || "GBP";
   const payer = getMemberProfile(expense.paidBy);
@@ -1004,6 +1621,69 @@ function createExpenseCard(expense) {
   return card;
 }
 
+function createSettlementCard(settlement) {
+  const trip = getSelectedTrip();
+  const baseCurrency = trip?.baseCurrency || "GBP";
+  const payer = getMemberProfile(settlement.payer || settlement.paidBy);
+  const recipient = getMemberProfile(
+    settlement.recipient ||
+      settlement.receivedBy ||
+      settlement.creditorUid ||
+      settlement.settledWith ||
+      Object.keys(settlement.splits || {})[0]
+  );
+  const card = document.createElement("article");
+  card.className = `expense-card settlement-${settlement.settlementType === "partial" ? "partial" : "full"}`;
+
+  const header = document.createElement("div");
+  header.className = "expense-card-header";
+
+  const titleBlock = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = settlement.settlementType === "partial" ? "Partial settlement" : "Full settlement";
+  const date = document.createElement("div");
+  date.className = "expense-date";
+  date.textContent = formatDate(settlement.date);
+  titleBlock.append(title, date);
+
+  const amountBlock = document.createElement("div");
+  amountBlock.className = "expense-amounts";
+  const amount = document.createElement("strong");
+  amount.textContent = `${formatMoney(settlement.amount)} ${baseCurrency}`;
+  const type = document.createElement("span");
+  type.textContent = settlement.settlementType === "partial" ? "partial payment" : "settled";
+  amountBlock.append(amount, type);
+  header.append(titleBlock, amountBlock);
+
+  const meta = document.createElement("div");
+  meta.className = "expense-meta-row";
+  const payerLine = document.createElement("div");
+  payerLine.className = "payer-line";
+  payerLine.append(createAvatar(payer, "payer-avatar"));
+  const payerText = document.createElement("span");
+  payerText.textContent = `${displayName(payer)} paid ${displayName(recipient)}`;
+  payerLine.append(payerText);
+  meta.append(payerLine);
+
+  const edited = document.createElement("div");
+  edited.className = "expense-edited";
+  edited.textContent = `Recorded by ${displayName(getMemberProfile(settlement.lastEditedBy))} at ${formatTimestamp(settlement.lastEditedAt)}`;
+
+  const actions = document.createElement("div");
+  actions.className = "expense-actions";
+  if (isSettlementParty(settlement, state.user?.uid)) {
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "small-btn danger";
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => deleteExpense(settlement.id));
+    actions.append(deleteButton);
+  }
+
+  card.append(header, meta, edited, actions);
+  return card;
+}
+
 function selectTrip(tripId) {
   if (!tripId) return;
   state.selectedTripId = tripId;
@@ -1020,13 +1700,15 @@ function setActiveTab(tabName) {
     panel.classList.toggle("is-hidden", panel.dataset.panel !== tabName);
   });
 
-  document.querySelectorAll(".bottom-tab").forEach((button) => {
+  document.querySelectorAll(".bottom-tab, .dashboard-tab").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.tab === tabName);
   });
 }
 
 function openTripModal() {
   els.tripForm.reset();
+  hideTripError();
+  clearTripValidation();
   els.currencyInput.value = "GBP";
   els.tripModal.classList.remove("is-hidden");
   window.setTimeout(() => els.tripNameInput.focus(), 0);
@@ -1041,6 +1723,7 @@ function openExpenseModal(expense = null) {
   if (!trip) return;
 
   state.editingExpenseId = expense?.id || null;
+  state.editingExpenseLastEditedMillis = expense ? getTimestampMillis(expense.lastEditedAt) : null;
   state.expenseSplitMode = expense?.splitMode || "equal";
 
   els.expenseForm.reset();
@@ -1061,6 +1744,7 @@ function openExpenseModal(expense = null) {
 function closeExpenseModal() {
   els.expenseModal.classList.add("is-hidden");
   state.editingExpenseId = null;
+  state.editingExpenseLastEditedMillis = null;
 }
 
 function renderMemberInputs(expense = null) {
@@ -1095,13 +1779,15 @@ function renderMemberInputs(expense = null) {
     });
 
     const avatar = createAvatar(profile, "participant-avatar");
-    const copy = document.createElement("span");
-    copy.className = "member-name";
-    copy.textContent = displayName(profile);
+    const copy = document.createElement("div");
+    copy.className = "member-copy";
+    const nameEl = document.createElement("span");
+    nameEl.className = "member-name";
+    nameEl.textContent = displayName(profile);
     const email = document.createElement("span");
     email.className = "member-email";
     email.textContent = profile.email || "";
-    copy.append(email);
+    copy.append(nameEl, email);
 
     label.append(checkbox, avatar, copy);
     els.participantList.append(label);
@@ -1189,7 +1875,9 @@ function updateCustomSplitTotal() {
     (sum, input) => sum + toCents(Number(input.value || 0)),
     0
   );
+  const matches = running === toCents(amount);
   els.customSplitTotal.textContent = `${formatMoney(fromCents(running))} / ${formatMoney(amount)}`;
+  els.customSplitTotal.classList.toggle("is-mismatch", !matches && running > 0);
 }
 
 async function copyCurrentInviteLink() {
@@ -1206,6 +1894,94 @@ async function copyCurrentInviteLink() {
     document.execCommand("copy");
     showToast("Invite link copied.");
   }
+}
+
+function exportTripCsv() {
+  const trip = getSelectedTrip();
+  if (!trip) return;
+
+  const columns = [
+    "date",
+    "description",
+    "paid by",
+    "original amount",
+    "original currency",
+    "rate used",
+    "converted amount",
+    "split mode",
+    "participants",
+    "settlement type"
+  ];
+
+  const rows = state.expenses.map((entry) => {
+    const payerUid = entry.isSettlement ? entry.payer || entry.paidBy : entry.paidBy;
+    const participants = entry.isSettlement
+      ? [entry.payer || entry.paidBy, entry.recipient].filter(Boolean)
+      : Object.keys(entry.splits || {});
+
+    return [
+      entry.date || "",
+      entry.description || "",
+      displayName(getMemberProfile(payerUid)),
+      formatMoney(entry.amount || 0),
+      entry.originalCurrency || trip.baseCurrency || "",
+      entry.rateUsed ?? "",
+      formatMoney(entry.convertedAmount || 0),
+      entry.splitMode || "",
+      participants.map((uid) => displayName(getMemberProfile(uid))).join("; "),
+      entry.isSettlement ? entry.settlementType || "settlement" : ""
+    ];
+  });
+
+  const csv = [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${slugify(trip.name || "trip")}-expenses.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast("CSV exported.");
+}
+
+async function copyBalanceSummary() {
+  const trip = getSelectedTrip();
+  if (!trip) return;
+
+  const { debts } = getCurrentBalanceResult();
+  const baseCurrency = trip.baseCurrency || "GBP";
+  const text = debts.length
+    ? debts
+        .map(
+          (debt) =>
+            `${displayName(getMemberProfile(debt.debtorUid))} owes ${displayName(getMemberProfile(debt.creditorUid))}: ${formatMoney(debt.amount)} ${baseCurrency}`
+        )
+        .join("\n")
+    : "Everyone is settled up.";
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast("Balance summary copied.");
+  } catch (error) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    document.body.append(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+    showToast("Balance summary copied.");
+  }
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function slugify(value) {
+  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "trip";
 }
 
 function getSelectedParticipants() {
@@ -1308,6 +2084,11 @@ function formatDate(value) {
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function dateStringFromTimestamp(timestamp) {
+  const date = timestamp?.toDate ? timestamp.toDate() : new Date();
+  return date.toISOString().slice(0, 10);
+}
+
 function formatTimestamp(timestamp) {
   const date = timestamp?.toDate ? timestamp.toDate() : null;
   if (!date) return "just now";
@@ -1317,6 +2098,13 @@ function formatTimestamp(timestamp) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function getTimestampMillis(timestamp) {
+  if (!timestamp) return null;
+  if (timestamp.toMillis) return timestamp.toMillis();
+  if (timestamp.toDate) return timestamp.toDate().getTime();
+  return null;
 }
 
 function toCents(value) {
@@ -1344,6 +2132,50 @@ function showExpenseError(message) {
 function hideExpenseError() {
   els.expenseFormError.textContent = "";
   els.expenseFormError.classList.add("is-hidden");
+}
+
+function showTripError(message) {
+  els.tripFormError.textContent = message;
+  els.tripFormError.classList.remove("is-hidden");
+}
+
+function hideTripError() {
+  els.tripFormError.textContent = "";
+  els.tripFormError.classList.add("is-hidden");
+}
+
+function markInvalid(input) {
+  input?.classList.add("is-invalid");
+}
+
+function clearTripValidation() {
+  [els.tripNameInput, els.currencyInput].forEach((input) => input?.classList.remove("is-invalid"));
+}
+
+function clearExpenseValidation() {
+  [
+    els.expenseDescriptionInput,
+    els.expenseDateInput,
+    els.expenseAmountInput,
+    els.expenseCurrencyInput,
+    els.expensePaidByInput
+  ].forEach((input) => input?.classList.remove("is-invalid"));
+
+  els.customSplitList?.querySelectorAll(".is-invalid").forEach((input) => input.classList.remove("is-invalid"));
+}
+
+function showSettlementError(message) {
+  els.settlementFormError.textContent = message;
+  els.settlementFormError.classList.remove("is-hidden");
+}
+
+function hideSettlementError() {
+  els.settlementFormError.textContent = "";
+  els.settlementFormError.classList.add("is-hidden");
+}
+
+function clearSettlementValidation() {
+  els.settlementAmountInput?.classList.remove("is-invalid");
 }
 
 let toastTimer = null;
