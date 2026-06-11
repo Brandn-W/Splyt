@@ -41,6 +41,8 @@ const els = {
   landing: document.getElementById("landing"),
   app: document.getElementById("app"),
   googleSignInBtn: document.getElementById("googleSignInBtn"),
+  inAppBrowserBanner: document.getElementById("inAppBrowserBanner"),
+  openInSafariBtn: document.getElementById("openInSafariBtn"),
   signOutBtn: document.getElementById("signOutBtn"),
   userPhoto: document.getElementById("userPhoto"),
   userName: document.getElementById("userName"),
@@ -220,7 +222,38 @@ auth.onAuthStateChanged(async (user) => {
   subscribeToTrips(user.uid);
 });
 
+function isInAppBrowser() {
+  const ua = navigator.userAgent;
+  if (!/iPhone|iPad|iPod|Android/.test(ua)) return false;
+  const knownInApp = /FBAN|FBAV|Instagram|Twitter|LinkedInApp|GSA|DuckDuckGo|MicroMessenger|Snapchat/.test(ua);
+  const lacksRealBrowser = !/Safari/.test(ua) || /wv\b/.test(ua);
+  return knownInApp || lacksRealBrowser;
+}
+
+(function initInAppBrowserBanner() {
+  if (!isInAppBrowser()) return;
+  els.inAppBrowserBanner.classList.remove("is-hidden");
+  els.googleSignInBtn.disabled = true;
+  els.openInSafariBtn.addEventListener("click", () => {
+    // Copy the URL to clipboard so the user can paste it into Safari
+    const url = window.location.href;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        showToast("Link copied! Paste it into Safari to sign in.");
+      }).catch(() => {
+        showToast("Copy this link and open it in Safari: " + url);
+      });
+    } else {
+      showToast("Open Safari and go to: " + url);
+    }
+  });
+})();
+
 async function signInWithGoogle() {
+  if (isInAppBrowser()) {
+    showToast("Open this page in Safari to sign in with Google.");
+    return;
+  }
   try {
     await auth.signInWithPopup(googleProvider);
   } catch (error) {
