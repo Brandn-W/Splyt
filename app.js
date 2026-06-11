@@ -193,6 +193,9 @@ document.querySelectorAll("[data-tab]").forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tab));
 });
 
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+const SESSION_KEY = "splyt_session_start";
+
 auth.onAuthStateChanged(async (user) => {
   state.user = user;
   if (state.unsubscribeTrips) {
@@ -205,6 +208,7 @@ auth.onAuthStateChanged(async (user) => {
   }
 
   if (!user) {
+    localStorage.removeItem(SESSION_KEY);
     state.trips = [];
     state.expenses = [];
     state.memberProfiles = {};
@@ -214,6 +218,15 @@ auth.onAuthStateChanged(async (user) => {
     showLanding();
     render();
     return;
+  }
+
+  const sessionStart = Number(localStorage.getItem(SESSION_KEY));
+  if (sessionStart && Date.now() - sessionStart > SESSION_TTL_MS) {
+    await auth.signOut();
+    return;
+  }
+  if (!sessionStart) {
+    localStorage.setItem(SESSION_KEY, String(Date.now()));
   }
 
   await saveUserProfile(user);
