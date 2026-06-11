@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/__/auth/(.*)",
+      "destination": "https://splitwise-free-277e2.firebaseapp.com/__/auth/$1"
+    }
+  ]
+}
