@@ -1128,8 +1128,9 @@ function renderDebtList(debts, baseCurrency) {
     return;
   }
 
+  const myDebts = debts.filter((d) => d.debtorUid === state.user?.uid);
   els.balanceEmptyState.classList.toggle("is-hidden", debts.length > 0);
-  els.settleFirstDebtBtn.classList.toggle("is-hidden", debts.length === 0);
+  els.settleFirstDebtBtn.classList.toggle("is-hidden", myDebts.length === 0);
   els.balanceStats.textContent = `${state.expenses.length} expense${state.expenses.length === 1 ? "" : "s"} included - ${(getSelectedTrip()?.memberUids || []).length} member${(getSelectedTrip()?.memberUids || []).length === 1 ? "" : "s"}`;
   els.balanceEmptyMessage.textContent =
     state.expenses.length > 0
@@ -1153,12 +1154,13 @@ function renderDebtList(debts, baseCurrency) {
 
 function settleFirstOutstandingDebt() {
   const { debts } = getCurrentBalanceResult();
-  if (!debts.length) {
-    showToast("There are no outstanding debts to settle.");
+  const myDebt = debts.find((d) => d.debtorUid === state.user?.uid);
+  if (!myDebt) {
+    showToast("You have no outstanding debts to settle.");
     return;
   }
 
-  openSettlementModal(debts[0], "full");
+  openSettlementModal(myDebt, "full");
 }
 
 function createDebtAction(debt) {
@@ -1166,7 +1168,12 @@ function createDebtAction(debt) {
   button.className = "primary-btn";
   button.type = "button";
   button.textContent = "Settle up";
-  button.addEventListener("click", () => openSettlementModal(debt));
+  if (state.user?.uid !== debt.debtorUid) {
+    button.disabled = true;
+    button.title = "Only the person who owes can settle this debt";
+  } else {
+    button.addEventListener("click", () => openSettlementModal(debt));
+  }
   return button;
 }
 
@@ -1295,6 +1302,10 @@ async function writeSettlementWithCheck(trip, debt, amount, requestedType) {
     if (!liveMembers.includes(state.user.uid)) throw new Error("You are no longer a member of this trip.");
     if (!liveMembers.includes(debt.debtorUid) || !liveMembers.includes(debt.creditorUid)) {
       throw new Error("One of these members is no longer in this trip.");
+    }
+
+    if (state.user.uid !== debt.debtorUid) {
+      throw new Error("You can only settle debts that you owe — you cannot settle on behalf of another user.");
     }
 
     const liveExpenses = [];
