@@ -739,6 +739,10 @@ h3 {
   margin-top: 16px;
 }
 
+.mobile-profile-strip {
+  display: none;
+}
+
 .rates-link {
   display: inline-block;
   margin-top: 6px;
@@ -1295,6 +1299,22 @@ h3 {
   .custom-share-row,
   .close-debt-actions {
     grid-template-columns: 1fr;
+  }
+
+  .mobile-profile-strip {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px 16px;
+    align-items: center;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .mobile-profile-strip .text-btn {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    min-height: 32px;
   }
 }
 

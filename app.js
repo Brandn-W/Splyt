@@ -45,6 +45,10 @@ const els = {
   userPhoto: document.getElementById("userPhoto"),
   userName: document.getElementById("userName"),
   userEmail: document.getElementById("userEmail"),
+  mobileUserPhoto: document.getElementById("mobileUserPhoto"),
+  mobileUserName: document.getElementById("mobileUserName"),
+  mobileUserEmail: document.getElementById("mobileUserEmail"),
+  mobileSignOutBtn: document.getElementById("mobileSignOutBtn"),
   tripList: document.getElementById("tripList"),
   emptyState: document.getElementById("emptyState"),
   tripDashboard: document.getElementById("tripDashboard"),
@@ -135,6 +139,7 @@ const els = {
 
 els.googleSignInBtn.addEventListener("click", signInWithGoogle);
 els.signOutBtn.addEventListener("click", () => auth.signOut());
+els.mobileSignOutBtn.addEventListener("click", () => auth.signOut());
 els.newTripBtn.addEventListener("click", openTripModal);
 els.mobileNewTripBtn.addEventListener("click", openTripModal);
 els.emptyCreateBtn.addEventListener("click", openTripModal);
@@ -2022,10 +2027,18 @@ function showLanding() {
 function showApp(user) {
   els.landing.classList.add("is-hidden");
   els.app.classList.remove("is-hidden");
-  els.userPhoto.src = user.photoURL || "";
-  els.userPhoto.alt = user.displayName ? `${user.displayName} profile photo` : "Profile photo";
-  els.userName.textContent = user.displayName || "Signed-in user";
-  els.userEmail.textContent = user.email || "";
+  const photo = user.photoURL || "";
+  const alt = user.displayName ? `${user.displayName} profile photo` : "Profile photo";
+  const name = user.displayName || "Signed-in user";
+  const email = user.email || "";
+  els.userPhoto.src = photo;
+  els.userPhoto.alt = alt;
+  els.userName.textContent = name;
+  els.userEmail.textContent = email;
+  els.mobileUserPhoto.src = photo;
+  els.mobileUserPhoto.alt = alt;
+  els.mobileUserName.textContent = name;
+  els.mobileUserEmail.textContent = email;
 }
 
 function getMemberProfile(uid) {
