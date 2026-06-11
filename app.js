@@ -1,7 +1,7 @@
 // Replace with your Firebase project config
 const firebaseConfig = {
   apiKey: "AIzaSyC2oVO4c9y2UHve-PSkUMsrJpQVLtT_sl8",
-  authDomain: "splyt.vercel.app",
+  authDomain: "splyt-amber.vercel.app",
   projectId: "splitwise-free-277e2",
   storageBucket: "splitwise-free-277e2.firebasestorage.app",
   messagingSenderId: "865350056921",
