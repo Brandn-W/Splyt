@@ -249,32 +249,17 @@ function isInAppBrowser() {
   });
 })();
 
-function isMobileBrowser() {
-  return /iPhone|iPad|iPod|Android/.test(navigator.userAgent);
-}
-
 async function signInWithGoogle() {
   if (isInAppBrowser()) {
     showToast("Open this page in Safari to sign in with Google.");
     return;
   }
   try {
-    if (isMobileBrowser()) {
-      await auth.signInWithRedirect(googleProvider);
-    } else {
-      await auth.signInWithPopup(googleProvider);
-    }
+    await auth.signInWithPopup(googleProvider);
   } catch (error) {
     showToast(error.message || "Google sign-in failed.");
   }
 }
-
-// Handle the result when returning from a signInWithRedirect flow
-auth.getRedirectResult().catch((error) => {
-  if (error?.code !== "auth/no-current-user") {
-    showToast(error?.message || "Google sign-in failed. Please try again.");
-  }
-});
 
 async function saveUserProfile(user) {
   const userRef = db.collection("users").doc(user.uid);
