@@ -14,6 +14,7 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 const FieldValue = firebase.firestore.FieldValue;
 
 const CURRENCIES = ["GBP", "USD", "EUR", "MYR", "JPY", "THB", "AUD", "CAD", "SGD"];
