@@ -533,6 +533,7 @@ h3 {
 .bottom-tab,
 .split-toggle {
   min-height: 40px;
+  min-width: 0;
   border: 1px solid transparent;
   border-radius: 0;
   background: transparent;
@@ -714,6 +715,11 @@ h3 {
   gap: 2px;
   color: var(--accent-highlight);
   font-weight: 700;
+  min-width: 0;
+}
+
+.debt-amount strong {
+  overflow-wrap: anywhere;
 }
 
 .debt-amount span,
@@ -726,6 +732,7 @@ h3 {
   display: block;
   font-size: clamp(1.8rem, 5vw, 3rem);
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .summary-grid {
@@ -918,9 +925,14 @@ h3 {
 
 .modal-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 24px;
+}
+
+.modal-actions > * {
+  min-width: 0;
 }
 
 .form-grid {
@@ -1287,6 +1299,10 @@ h3 {
     padding-bottom: 80px;
     border-left: 0;
     border-right: 0;
+  }
+
+  .modal-actions > * {
+    flex: 1 1 auto;
   }
 
   .compact-modal {
