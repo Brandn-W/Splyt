@@ -381,7 +381,7 @@ function subscribeToExpenses() {
       (snapshot) => {
         state.expensesLoading = false;
         state.expenses = snapshot.docs
-          .map((doc) => normalizeEntry({ id: doc.id, ...doc.data() }))
+          .map((doc) => normalizeEntry({ id: doc.id, ...doc.data({ serverTimestamps: "estimate" }) }))
           .sort(sortEntriesNewestFirst);
         renderExpenses();
         renderBalancesAndSummary();
@@ -1039,8 +1039,9 @@ function sortEntriesNewestFirst(a, b) {
 }
 
 function getEntryTime(entry) {
+  const createdMillis = getTimestampMillis(entry.createdAt);
+  if (createdMillis !== null) return createdMillis;
   if (entry.date) return new Date(`${entry.date}T00:00:00`).getTime() || 0;
-  if (entry.createdAt?.toMillis) return entry.createdAt.toMillis();
   return 0;
 }
 
