@@ -86,6 +86,8 @@ const els = {
   bottomTripSelect: document.getElementById("bottomTripSelect"),
   deleteTripBtn: document.getElementById("deleteTripBtn"),
   leaveTripBtn: document.getElementById("leaveTripBtn"),
+  renameTripInput: document.getElementById("renameTripInput"),
+  renameTripBtn: document.getElementById("renameTripBtn"),
   themeDarkBtn: document.getElementById("themeDarkBtn"),
   themeLightBtn: document.getElementById("themeLightBtn"),
   exportCsvBtn: document.getElementById("exportCsvBtn"),
@@ -164,6 +166,13 @@ els.settingsCopyInviteBtn.addEventListener("click", copyCurrentInviteLink);
 els.desktopCopyInviteBtn.addEventListener("click", copyCurrentInviteLink);
 els.mobileTripSelect.addEventListener("change", (event) => selectTrip(event.target.value));
 els.bottomTripSelect.addEventListener("change", (event) => selectTrip(event.target.value));
+els.renameTripBtn.addEventListener("click", renameTrip);
+els.renameTripInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    renameTrip();
+  }
+});
 els.baseCurrencySetting.addEventListener("change", changeBaseCurrency);
 els.closeTripBtn.addEventListener("click", openCloseTripModal);
 els.reopenTripBtn.addEventListener("click", reopenTrip);
@@ -1011,6 +1020,9 @@ function renderDashboard(trip) {
   els.emptyState.classList.add("is-hidden");
   els.tripDashboard.classList.remove("is-hidden");
   els.tripName.textContent = trip.name || "Untitled trip";
+  if (document.activeElement !== els.renameTripInput) {
+    els.renameTripInput.value = trip.name || "";
+  }
   els.tripCurrency.textContent = `${trip.baseCurrency || "GBP"} base currency`;
   els.mobileTripTitle.textContent = trip.name || "Dashboard";
   els.mobileTripCurrency.textContent = trip.baseCurrency || "GBP";
@@ -1524,6 +1536,29 @@ async function openCloseTripModal() {
     }
   } catch {
     // non-critical — status display only
+  }
+}
+
+async function renameTrip() {
+  const trip = getSelectedTrip();
+  if (!trip) return;
+
+  const name = els.renameTripInput.value.trim();
+  if (!name) {
+    markInvalid(els.renameTripInput);
+    showToast("Enter a trip name.");
+    return;
+  }
+  if (name === trip.name) return;
+
+  els.renameTripBtn.disabled = true;
+  try {
+    await db.collection("trips").doc(trip.id).update({ name });
+    showToast("Trip renamed.");
+  } catch (error) {
+    showToast(error.message || "Could not rename trip.");
+  } finally {
+    els.renameTripBtn.disabled = false;
   }
 }
 
