@@ -12,6 +12,14 @@
     <link rel="preconnect" href="https://firestore.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <script>
+      // Apply the saved theme before first paint to avoid a dark flash.
+      try {
+        if (localStorage.getItem("splyt_theme") === "light") {
+          document.documentElement.dataset.theme = "light";
+        }
+      } catch (error) {}
+    </script>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -84,16 +92,6 @@
                 <p id="tripCurrency" class="eyebrow"></p>
                 <h1 id="tripName"></h1>
               </div>
-              <div class="header-actions">
-                <button id="mobileActionsBtn" class="secondary-btn mobile-actions-toggle" type="button">Actions</button>
-                <div class="header-actions-menu">
-                  <button id="copyInviteBtn" class="secondary-btn" type="button">Copy invite</button>
-                  <button id="exportCsvBtn" class="secondary-btn" type="button">Export CSV</button>
-                  <button id="copyBalanceSummaryBtn" class="secondary-btn" type="button">Copy balance summary</button>
-                  <button id="deleteTripBtn" class="danger-btn is-hidden" type="button">Delete trip</button>
-                  <button id="leaveTripBtn" class="secondary-btn is-hidden" type="button">Leave trip</button>
-                </div>
-              </div>
             </header>
 
             <nav class="desktop-tab-strip" aria-label="Dashboard sections">
@@ -161,41 +159,64 @@
                 <div class="section-heading">
                   <h2>Settings</h2>
                 </div>
-                <label class="field-label" for="mobileTripSelect">Switch trip</label>
-                <select id="mobileTripSelect" class="select-input"></select>
-                <label class="field-label" for="baseCurrencySetting">Base currency</label>
-                <select id="baseCurrencySetting" class="select-input">
-                  <option value="GBP">GBP</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="MYR">MYR</option>
-                  <option value="JPY">JPY</option>
-                  <option value="THB">THB</option>
-                  <option value="AUD">AUD</option>
-                  <option value="CAD">CAD</option>
-                  <option value="SGD">SGD</option>
-                </select>
-                <button id="closeTripBtn" class="danger-btn settings-action is-hidden" type="button">Close Trip</button>
-                <button id="reopenTripBtn" class="secondary-btn settings-action is-hidden" type="button">Reopen trip</button>
-                <div id="memberManagementPanel" class="member-management is-hidden">
+
+                <section class="settings-section" aria-labelledby="tripSettingsTitle">
                   <div class="section-heading compact-heading">
-                    <h3>Members</h3>
+                    <h3 id="tripSettingsTitle">Trip settings</h3>
                   </div>
-                  <div id="settingsMemberList" class="member-management-list"></div>
-                </div>
-                <label class="field-label" for="inviteLink">Invite link</label>
-                <div class="copy-row">
-                  <input id="inviteLink" class="text-input" type="text" readonly />
-                  <button id="settingsCopyInviteBtn" class="secondary-btn" type="button">Copy</button>
-                </div>
-                <div class="mobile-profile-strip">
-                  <img id="mobileUserPhoto" class="avatar" alt="" />
-                  <div class="profile-copy">
-                    <strong id="mobileUserName"></strong>
-                    <span id="mobileUserEmail"></span>
+                  <label class="field-label" for="mobileTripSelect">Switch trip</label>
+                  <select id="mobileTripSelect" class="select-input"></select>
+                  <label class="field-label" for="baseCurrencySetting">Base currency</label>
+                  <select id="baseCurrencySetting" class="select-input">
+                    <option value="GBP">GBP</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="MYR">MYR</option>
+                    <option value="JPY">JPY</option>
+                    <option value="THB">THB</option>
+                    <option value="AUD">AUD</option>
+                    <option value="CAD">CAD</option>
+                    <option value="SGD">SGD</option>
+                  </select>
+                  <label class="field-label" for="inviteLink">Invite link</label>
+                  <div class="copy-row">
+                    <input id="inviteLink" class="text-input" type="text" readonly />
+                    <button id="settingsCopyInviteBtn" class="secondary-btn" type="button">Copy</button>
                   </div>
-                  <button id="mobileSignOutBtn" class="text-btn" type="button">Sign out</button>
-                </div>
+                  <div class="settings-actions">
+                    <button id="exportCsvBtn" class="secondary-btn" type="button">Export CSV</button>
+                    <button id="copyBalanceSummaryBtn" class="secondary-btn" type="button">Copy balance summary</button>
+                    <button id="closeTripBtn" class="danger-btn is-hidden" type="button">Close Trip</button>
+                    <button id="reopenTripBtn" class="secondary-btn is-hidden" type="button">Reopen trip</button>
+                    <button id="leaveTripBtn" class="secondary-btn is-hidden" type="button">Leave trip</button>
+                    <button id="deleteTripBtn" class="danger-btn is-hidden" type="button">Delete trip</button>
+                  </div>
+                  <div id="memberManagementPanel" class="member-management is-hidden">
+                    <div class="section-heading compact-heading">
+                      <h3>Members</h3>
+                    </div>
+                    <div id="settingsMemberList" class="member-management-list"></div>
+                  </div>
+                </section>
+
+                <section class="settings-section" aria-labelledby="globalSettingsTitle">
+                  <div class="section-heading compact-heading">
+                    <h3 id="globalSettingsTitle">Global settings</h3>
+                  </div>
+                  <div class="field-label" id="themeLabel">Appearance</div>
+                  <div class="split-toolbar" role="group" aria-labelledby="themeLabel">
+                    <button id="themeDarkBtn" class="split-toggle is-active" type="button">Dark</button>
+                    <button id="themeLightBtn" class="split-toggle" type="button">Light</button>
+                  </div>
+                  <div class="settings-profile-strip">
+                    <img id="mobileUserPhoto" class="avatar" alt="" />
+                    <div class="profile-copy">
+                      <strong id="mobileUserName"></strong>
+                      <span id="mobileUserEmail"></span>
+                    </div>
+                    <button id="mobileSignOutBtn" class="secondary-btn" type="button">Sign out</button>
+                  </div>
+                </section>
               </section>
             </div>
           </article>

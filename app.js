@@ -85,9 +85,8 @@ const els = {
   bottomTripSelect: document.getElementById("bottomTripSelect"),
   deleteTripBtn: document.getElementById("deleteTripBtn"),
   leaveTripBtn: document.getElementById("leaveTripBtn"),
-  mobileActionsBtn: document.getElementById("mobileActionsBtn"),
-  headerActionsMenu: document.querySelector(".header-actions-menu"),
-  copyInviteBtn: document.getElementById("copyInviteBtn"),
+  themeDarkBtn: document.getElementById("themeDarkBtn"),
+  themeLightBtn: document.getElementById("themeLightBtn"),
   exportCsvBtn: document.getElementById("exportCsvBtn"),
   copyBalanceSummaryBtn: document.getElementById("copyBalanceSummaryBtn"),
   settingsCopyInviteBtn: document.getElementById("settingsCopyInviteBtn"),
@@ -156,17 +155,8 @@ els.cancelTripBtn.addEventListener("click", closeTripModal);
 els.tripForm.addEventListener("submit", createTrip);
 els.deleteTripBtn.addEventListener("click", deleteSelectedTrip);
 els.leaveTripBtn.addEventListener("click", leaveSelectedTrip);
-els.mobileActionsBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  els.headerActionsMenu.classList.toggle("is-open");
-});
-els.headerActionsMenu.addEventListener("click", () => {
-  els.headerActionsMenu.classList.remove("is-open");
-});
-document.addEventListener("click", () => {
-  els.headerActionsMenu.classList.remove("is-open");
-});
-els.copyInviteBtn.addEventListener("click", copyCurrentInviteLink);
+els.themeDarkBtn.addEventListener("click", () => setTheme("dark"));
+els.themeLightBtn.addEventListener("click", () => setTheme("light"));
 els.exportCsvBtn.addEventListener("click", exportTripCsv);
 els.copyBalanceSummaryBtn.addEventListener("click", copyBalanceSummary);
 els.settingsCopyInviteBtn.addEventListener("click", copyCurrentInviteLink);
@@ -197,9 +187,30 @@ document.querySelectorAll("[data-tab]").forEach((button) => {
   button.addEventListener("click", () => setActiveTab(button.dataset.tab));
 });
 
+try {
+  setTheme(localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark");
+} catch (error) {
+  setTheme("dark");
+}
+
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 const SESSION_KEY = "splyt_session_start";
 const LAST_TRIP_KEY_PREFIX = "splyt_last_trip_";
+const THEME_KEY = "splyt_theme";
+
+function setTheme(theme) {
+  const isLight = theme === "light";
+  if (isLight) {
+    document.documentElement.dataset.theme = "light";
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+  try {
+    localStorage.setItem(THEME_KEY, isLight ? "light" : "dark");
+  } catch (error) {}
+  els.themeDarkBtn.classList.toggle("is-active", !isLight);
+  els.themeLightBtn.classList.toggle("is-active", isLight);
+}
 
 function rememberSelectedTrip(tripId) {
   if (!state.user) return;
