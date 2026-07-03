@@ -1241,11 +1241,23 @@ h3 {
   }
 
   .trip-header {
-    display: block;
+    display: none;
   }
 
-  .trip-header h1 {
-    font-size: 2rem;
+  .topbar-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .topbar-currency:not(:empty)::before {
+    content: " · ";
+  }
+
+  .mobile-topbar h2 {
+    font-size: 1.3rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .desktop-tab-strip {

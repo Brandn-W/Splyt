@@ -61,6 +61,7 @@ const els = {
   tripName: document.getElementById("tripName"),
   tripCurrency: document.getElementById("tripCurrency"),
   mobileTripTitle: document.getElementById("mobileTripTitle"),
+  mobileTripCurrency: document.getElementById("mobileTripCurrency"),
   memberCount: document.getElementById("memberCount"),
   detailMemberCount: document.getElementById("detailMemberCount"),
   detailOwner: document.getElementById("detailOwner"),
@@ -999,6 +1000,7 @@ function renderDashboard(trip) {
     els.emptyState.classList.remove("is-hidden");
     els.tripDashboard.classList.add("is-hidden");
     els.mobileTripTitle.textContent = "Dashboard";
+    els.mobileTripCurrency.textContent = "";
     return;
   }
 
@@ -1011,6 +1013,7 @@ function renderDashboard(trip) {
   els.tripName.textContent = trip.name || "Untitled trip";
   els.tripCurrency.textContent = `${trip.baseCurrency || "GBP"} base currency`;
   els.mobileTripTitle.textContent = trip.name || "Dashboard";
+  els.mobileTripCurrency.textContent = trip.baseCurrency || "GBP";
   els.memberCount.textContent = String(memberTotal);
   els.detailMemberCount.textContent = `${memberTotal} ${memberTotal === 1 ? "person" : "people"}`;
   els.detailOwner.textContent = isCreator ? "You created this trip." : "You are a member of this trip.";
