@@ -199,6 +199,30 @@ document.querySelectorAll("[data-tab]").forEach((button) => {
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 const SESSION_KEY = "splyt_session_start";
+const LAST_TRIP_KEY_PREFIX = "splyt_last_trip_";
+
+function rememberSelectedTrip(tripId) {
+  if (!state.user) return;
+  const key = LAST_TRIP_KEY_PREFIX + state.user.uid;
+  try {
+    if (tripId) {
+      localStorage.setItem(key, tripId);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch (error) {
+    // localStorage unavailable (private mode); resume-last-trip just won't work.
+  }
+}
+
+function recallLastTrip() {
+  if (!state.user) return null;
+  try {
+    return localStorage.getItem(LAST_TRIP_KEY_PREFIX + state.user.uid);
+  } catch (error) {
+    return null;
+  }
+}
 
 auth.onAuthStateChanged(async (user) => {
   state.user = user;
@@ -341,8 +365,13 @@ function subscribeToTrips(uid) {
           state.selectedTripId = state.pendingInviteTripId;
           state.pendingInviteTripId = null;
         } else if (!state.trips.some((trip) => trip.id === state.selectedTripId)) {
-          state.selectedTripId = state.trips[0]?.id || null;
+          const lastTripId = recallLastTrip();
+          state.selectedTripId =
+            (state.trips.some((trip) => trip.id === lastTripId) ? lastTripId : null) ||
+            state.trips[0]?.id ||
+            null;
         }
+        rememberSelectedTrip(state.selectedTripId);
 
         if (previousTripId !== state.selectedTripId || !state.unsubscribeExpenses) {
           subscribeToExpenses();
@@ -469,6 +498,7 @@ async function createTrip(event) {
     });
 
     state.selectedTripId = docRef.id;
+    rememberSelectedTrip(docRef.id);
     closeTripModal();
     showToast("Trip created.");
   } catch (error) {
@@ -1835,6 +1865,7 @@ function createSettlementCard(settlement) {
 function selectTrip(tripId) {
   if (!tripId) return;
   state.selectedTripId = tripId;
+  rememberSelectedTrip(tripId);
   state.expenses = [];
   subscribeToExpenses();
   loadMemberProfiles().then(render);
