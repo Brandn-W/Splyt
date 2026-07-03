@@ -13,6 +13,9 @@ firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
 const db = firebase.firestore();
+// Must run before any other Firestore call; failures (unsupported browser,
+// multiple incompatible tabs) just mean we fall back to the in-memory cache.
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 const FieldValue = firebase.firestore.FieldValue;
@@ -230,8 +233,8 @@ auth.onAuthStateChanged(async (user) => {
     localStorage.setItem(SESSION_KEY, String(Date.now()));
   }
 
-  await saveUserProfile(user);
   showApp(user);
+  saveUserProfile(user).catch(() => {});
   await joinPendingInvite();
   subscribeToTrips(user.uid);
 });
@@ -345,6 +348,7 @@ function subscribeToTrips(uid) {
           subscribeToExpenses();
         }
 
+        render();
         await loadMemberProfiles();
         render();
       },
@@ -407,6 +411,12 @@ async function loadMemberProfiles() {
 
   await Promise.all(
     uids.map(async (uid) => {
+      const cached = state.memberProfiles[uid];
+      if (cached && !cached.isFallback) {
+        profiles[uid] = cached;
+        return;
+      }
+
       if (uid === state.user?.uid) {
         profiles[uid] = userProfileFromAuth(state.user);
       }
@@ -416,10 +426,10 @@ async function loadMemberProfiles() {
         if (doc.exists) {
           profiles[uid] = { uid, ...doc.data() };
         } else if (!profiles[uid]) {
-          profiles[uid] = fallbackProfile(uid);
+          profiles[uid] = { ...fallbackProfile(uid), isFallback: true };
         }
       } catch (error) {
-        if (!profiles[uid]) profiles[uid] = fallbackProfile(uid);
+        if (!profiles[uid]) profiles[uid] = { ...fallbackProfile(uid), isFallback: true };
       }
     })
   );
