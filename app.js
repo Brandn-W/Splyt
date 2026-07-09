@@ -34,6 +34,7 @@ const state = {
   editingExpenseLastEditedMillis: null,
   settlementDebt: null,
   settlementMode: "full",
+  receipt: null,
   tripsLoading: false,
   expensesLoading: false,
   unsubscribeTrips: null,
@@ -127,6 +128,20 @@ const els = {
   closeExpenseModalBtn: document.getElementById("closeExpenseModalBtn"),
   cancelExpenseBtn: document.getElementById("cancelExpenseBtn"),
   saveExpenseBtn: document.getElementById("saveExpenseBtn"),
+  scanReceiptBtn: document.getElementById("scanReceiptBtn"),
+  receiptFileInput: document.getElementById("receiptFileInput"),
+  receiptScanStatus: document.getElementById("receiptScanStatus"),
+  receiptModal: document.getElementById("receiptModal"),
+  receiptItemList: document.getElementById("receiptItemList"),
+  addReceiptItemBtn: document.getElementById("addReceiptItemBtn"),
+  receiptTaxInput: document.getElementById("receiptTaxInput"),
+  receiptTipInput: document.getElementById("receiptTipInput"),
+  receiptRunningTotal: document.getElementById("receiptRunningTotal"),
+  receiptTotalDetail: document.getElementById("receiptTotalDetail"),
+  receiptFormError: document.getElementById("receiptFormError"),
+  closeReceiptModalBtn: document.getElementById("closeReceiptModalBtn"),
+  cancelReceiptBtn: document.getElementById("cancelReceiptBtn"),
+  applyReceiptBtn: document.getElementById("applyReceiptBtn"),
   settlementModal: document.getElementById("settlementModal"),
   settlementForm: document.getElementById("settlementForm"),
   settlementParties: document.getElementById("settlementParties"),
@@ -186,6 +201,14 @@ els.includePayerInput.addEventListener("change", syncPayerParticipant);
 els.expenseAmountInput.addEventListener("input", updateCustomSplitTotal);
 els.equalSplitBtn.addEventListener("click", () => setExpenseSplitMode("equal"));
 els.customSplitBtn.addEventListener("click", () => setExpenseSplitMode("custom"));
+els.scanReceiptBtn.addEventListener("click", () => els.receiptFileInput.click());
+els.receiptFileInput.addEventListener("change", handleReceiptFile);
+els.closeReceiptModalBtn.addEventListener("click", closeReceiptModal);
+els.cancelReceiptBtn.addEventListener("click", closeReceiptModal);
+els.addReceiptItemBtn.addEventListener("click", addBlankReceiptItem);
+els.receiptTaxInput.addEventListener("input", updateReceiptTotals);
+els.receiptTipInput.addEventListener("input", updateReceiptTotals);
+els.applyReceiptBtn.addEventListener("click", applyReceiptToExpense);
 els.settlementForm.addEventListener("submit", confirmSettlement);
 els.closeSettlementModalBtn.addEventListener("click", closeSettlementModal);
 els.cancelSettlementBtn.addEventListener("click", closeSettlementModal);
@@ -2106,6 +2129,323 @@ function updateCustomSplitTotal() {
   const matches = running === toCents(amount);
   els.customSplitTotal.textContent = `${formatMoney(fromCents(running))} / ${formatMoney(amount)}`;
   els.customSplitTotal.classList.toggle("is-mismatch", !matches && running > 0);
+}
+
+async function handleReceiptFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+
+  els.scanReceiptBtn.disabled = true;
+  els.receiptScanStatus.textContent = "Reading receipt...";
+
+  try {
+    const image = await downscaleReceiptImage(file);
+    const response = await fetch("/api/parse-receipt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(image)
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error || "Could not read the receipt.");
+    openReceiptModal(payload || {});
+  } catch (error) {
+    showToast(error.message || "Could not read the receipt.");
+  } finally {
+    els.scanReceiptBtn.disabled = false;
+    els.receiptScanStatus.textContent = "";
+  }
+}
+
+async function downscaleReceiptImage(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read the photo."));
+    reader.readAsDataURL(file);
+  });
+
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("That file is not a readable image."));
+    img.src = dataUrl;
+  });
+
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  return { mimeType: "image/jpeg", data: canvas.toDataURL("image/jpeg", 0.85).split(",")[1] };
+}
+
+function blankReceiptItem() {
+  return { name: "", priceCents: 0, assigned: [] };
+}
+
+// Turn parsed lines into one row per unit so "2x beer" can go to two people.
+function expandParsedItems(items) {
+  const rows = [];
+
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const totalCents = toCents(Number(item.totalPrice));
+    if (!Number.isFinite(totalCents)) return;
+    const name = String(item.name || "Item").trim().slice(0, 60) || "Item";
+    const qty = Math.floor(Number(item.quantity) || 1);
+
+    if (qty > 1 && qty <= 12 && totalCents > 0) {
+      const perUnit = Math.floor(totalCents / qty);
+      for (let index = 0; index < qty; index += 1) {
+        const cents = index === qty - 1 ? totalCents - perUnit * (qty - 1) : perUnit;
+        rows.push({ name, priceCents: cents, assigned: [] });
+      }
+    } else {
+      rows.push({ name: qty > 1 ? `${qty}x ${name}` : name, priceCents: totalCents, assigned: [] });
+    }
+  });
+
+  return rows;
+}
+
+function openReceiptModal(parsed) {
+  const items = expandParsedItems(parsed.items);
+  state.receipt = {
+    merchant: String(parsed.merchant || "").trim().slice(0, 80),
+    date: String(parsed.date || ""),
+    currency: String(parsed.currency || "").trim().toUpperCase(),
+    items: items.length ? items : [blankReceiptItem()],
+    taxCents: Math.max(0, toCents(Number(parsed.tax) || 0)),
+    tipCents: Math.max(0, toCents(Number(parsed.tip) || 0)),
+    statedTotalCents: Number(parsed.total) > 0 ? toCents(Number(parsed.total)) : null
+  };
+
+  els.receiptTaxInput.value = state.receipt.taxCents ? formatMoney(fromCents(state.receipt.taxCents)) : "";
+  els.receiptTipInput.value = state.receipt.tipCents ? formatMoney(fromCents(state.receipt.tipCents)) : "";
+  hideReceiptError();
+  renderReceiptItems();
+  updateReceiptTotals();
+  els.receiptModal.classList.remove("is-hidden");
+}
+
+function closeReceiptModal() {
+  els.receiptModal.classList.add("is-hidden");
+  state.receipt = null;
+}
+
+function addBlankReceiptItem() {
+  if (!state.receipt) return;
+  state.receipt.items.push(blankReceiptItem());
+  renderReceiptItems();
+}
+
+function renderReceiptItems() {
+  const receipt = state.receipt;
+  els.receiptItemList.innerHTML = "";
+  if (!receipt) return;
+
+  const memberUids = getSelectedTrip()?.memberUids || [];
+
+  receipt.items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "receipt-item-row";
+
+    const top = document.createElement("div");
+    top.className = "receipt-item-top";
+
+    const nameInput = document.createElement("input");
+    nameInput.className = "text-input";
+    nameInput.type = "text";
+    nameInput.maxLength = 60;
+    nameInput.placeholder = "Item";
+    nameInput.value = item.name;
+    nameInput.addEventListener("input", () => {
+      item.name = nameInput.value;
+    });
+
+    const priceInput = document.createElement("input");
+    priceInput.className = "text-input";
+    priceInput.type = "number";
+    priceInput.step = "0.01";
+    priceInput.inputMode = "decimal";
+    priceInput.placeholder = "0.00";
+    priceInput.value = item.priceCents === 0 ? "" : formatMoney(fromCents(item.priceCents));
+    priceInput.addEventListener("input", () => {
+      item.priceCents = toCents(Number(priceInput.value || 0));
+      updateReceiptTotals();
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "icon-btn";
+    removeBtn.type = "button";
+    removeBtn.textContent = "x";
+    removeBtn.setAttribute("aria-label", "Remove item");
+    removeBtn.addEventListener("click", () => {
+      receipt.items.splice(index, 1);
+      renderReceiptItems();
+      updateReceiptTotals();
+    });
+
+    top.append(nameInput, priceInput, removeBtn);
+
+    const chips = document.createElement("div");
+    chips.className = "receipt-chips";
+
+    const allChip = document.createElement("button");
+    allChip.className = "receipt-chip";
+    allChip.type = "button";
+    allChip.textContent = "All";
+    allChip.classList.toggle("is-assigned", memberUids.length > 0 && item.assigned.length === memberUids.length);
+    allChip.addEventListener("click", () => {
+      item.assigned = item.assigned.length === memberUids.length ? [] : [...memberUids];
+      renderReceiptItems();
+    });
+    chips.append(allChip);
+
+    memberUids.forEach((uid) => {
+      const profile = getMemberProfile(uid);
+      const chip = document.createElement("button");
+      chip.className = "receipt-chip";
+      chip.type = "button";
+      chip.classList.toggle("is-assigned", item.assigned.includes(uid));
+      chip.append(createAvatar(profile, "participant-avatar"));
+      const label = document.createElement("span");
+      label.textContent = displayName(profile).split(" ")[0];
+      chip.append(label);
+      chip.addEventListener("click", () => {
+        item.assigned = item.assigned.includes(uid)
+          ? item.assigned.filter((id) => id !== uid)
+          : [...item.assigned, uid];
+        chip.classList.toggle("is-assigned", item.assigned.includes(uid));
+        allChip.classList.toggle("is-assigned", item.assigned.length === memberUids.length);
+      });
+      chips.append(chip);
+    });
+
+    row.append(top, chips);
+    els.receiptItemList.append(row);
+  });
+}
+
+function updateReceiptTotals() {
+  const receipt = state.receipt;
+  if (!receipt) return;
+
+  receipt.taxCents = toCents(Number(els.receiptTaxInput.value || 0));
+  receipt.tipCents = toCents(Number(els.receiptTipInput.value || 0));
+
+  const itemsCents = receipt.items.reduce((sum, item) => sum + item.priceCents, 0);
+  const totalCents = itemsCents + receipt.taxCents + receipt.tipCents;
+  const currency = CURRENCIES.includes(receipt.currency) ? receipt.currency : els.expenseCurrencyInput.value;
+
+  els.receiptRunningTotal.textContent = `${formatMoney(fromCents(totalCents))} ${currency}`;
+  const stated = receipt.statedTotalCents;
+  const mismatch = stated !== null && stated !== totalCents;
+  els.receiptRunningTotal.classList.toggle("is-mismatch", mismatch);
+  els.receiptTotalDetail.textContent =
+    stated === null
+      ? "Items + tax + tip"
+      : mismatch
+        ? `Receipt says ${formatMoney(fromCents(stated))} — adjust prices to match.`
+        : "Matches the printed total.";
+}
+
+// Split cents equally among uids, spreading leftover cents deterministically.
+function distributeCents(totalCents, uids, shares) {
+  const base = Math.trunc(totalCents / uids.length);
+  let remainder = totalCents - base * uids.length;
+
+  uids.forEach((uid) => {
+    let cents = base;
+    if (remainder !== 0) {
+      cents += remainder > 0 ? 1 : -1;
+      remainder += remainder > 0 ? -1 : 1;
+    }
+    shares[uid] = (shares[uid] || 0) + cents;
+  });
+}
+
+function applyReceiptToExpense() {
+  const receipt = state.receipt;
+  const trip = getSelectedTrip();
+  if (!receipt || !trip) return;
+  hideReceiptError();
+  updateReceiptTotals();
+
+  const items = receipt.items.filter((item) => item.priceCents !== 0);
+  if (!items.length) {
+    showReceiptError("Add at least one item with a price.");
+    return;
+  }
+  if (items.some((item) => !item.assigned.length)) {
+    showReceiptError("Every item with a price needs at least one person assigned.");
+    return;
+  }
+
+  const shares = {};
+  items.forEach((item) => distributeCents(item.priceCents, item.assigned, shares));
+
+  const itemsCents = items.reduce((sum, item) => sum + item.priceCents, 0);
+  const taxTipCents = receipt.taxCents + receipt.tipCents;
+  const totalCents = itemsCents + taxTipCents;
+  if (totalCents <= 0) {
+    showReceiptError("The receipt total must be greater than zero.");
+    return;
+  }
+
+  // Prorate tax and tip against each person's item subtotal.
+  const uids = Object.keys(shares);
+  if (taxTipCents !== 0) {
+    let assignedCents = 0;
+    uids.forEach((uid, index) => {
+      const cents =
+        index === uids.length - 1
+          ? taxTipCents - assignedCents
+          : itemsCents > 0
+            ? Math.round((taxTipCents * shares[uid]) / itemsCents)
+            : Math.trunc(taxTipCents / uids.length);
+      shares[uid] += cents;
+      assignedCents += cents;
+    });
+  }
+
+  // Fill the expense form and hand off to the normal custom-split save path.
+  if (!els.expenseDescriptionInput.value.trim()) {
+    els.expenseDescriptionInput.value = receipt.merchant || "Receipt";
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(receipt.date)) {
+    els.expenseDateInput.value = receipt.date;
+  }
+  if (CURRENCIES.includes(receipt.currency)) {
+    els.expenseCurrencyInput.value = receipt.currency;
+  }
+  els.expenseAmountInput.value = formatMoney(fromCents(totalCents));
+
+  els.includePayerInput.checked = Object.prototype.hasOwnProperty.call(shares, els.expensePaidByInput.value);
+  els.participantList.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+    checkbox.checked = Object.prototype.hasOwnProperty.call(shares, checkbox.value);
+  });
+  syncPayerParticipant();
+  setExpenseSplitMode("custom");
+  els.customSplitList.querySelectorAll("[data-custom-share]").forEach((input) => {
+    input.value = formatMoney(fromCents(shares[input.dataset.customShare] || 0));
+  });
+  updateCustomSplitTotal();
+
+  closeReceiptModal();
+  showToast("Receipt applied — check the split and save.");
+}
+
+function showReceiptError(message) {
+  els.receiptFormError.textContent = message;
+  els.receiptFormError.classList.remove("is-hidden");
+}
+
+function hideReceiptError() {
+  els.receiptFormError.textContent = "";
+  els.receiptFormError.classList.add("is-hidden");
 }
 
 async function copyCurrentInviteLink() {

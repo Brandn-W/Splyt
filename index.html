@@ -306,6 +306,12 @@
           <button id="closeExpenseModalBtn" class="icon-btn" type="button" aria-label="Close" title="Close">x</button>
         </div>
 
+        <div class="receipt-scan-row">
+          <button id="scanReceiptBtn" class="secondary-btn" type="button">Scan receipt</button>
+          <span id="receiptScanStatus" class="receipt-scan-status" aria-live="polite"></span>
+        </div>
+        <input id="receiptFileInput" type="file" accept="image/*" class="is-hidden" />
+
         <label class="field-label" for="expenseDescriptionInput">Description <span class="required-mark">required</span></label>
         <input id="expenseDescriptionInput" class="text-input" type="text" maxlength="100" required autocomplete="off" />
 
@@ -421,6 +427,46 @@
         </div>
 
         <div id="closeTripDebtList" class="close-trip-debt-list"></div>
+      </section>
+    </div>
+
+    <div id="receiptModal" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="receiptModalTitle">
+      <section class="modal-card large-modal">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Receipt</p>
+            <h2 id="receiptModalTitle">Assign items</h2>
+          </div>
+          <button id="closeReceiptModalBtn" class="icon-btn" type="button" aria-label="Close" title="Close">x</button>
+        </div>
+
+        <p class="receipt-hint">Tap the people under each item to choose who shares it. Fix any name or price the scan misread.</p>
+
+        <div id="receiptItemList" class="receipt-item-list"></div>
+        <button id="addReceiptItemBtn" class="secondary-btn" type="button">Add item</button>
+
+        <div class="form-grid">
+          <div>
+            <label class="field-label" for="receiptTaxInput">Tax</label>
+            <input id="receiptTaxInput" class="text-input" type="number" min="0" step="0.01" inputmode="decimal" />
+          </div>
+          <div>
+            <label class="field-label" for="receiptTipInput">Tip / service</label>
+            <input id="receiptTipInput" class="text-input" type="number" min="0" step="0.01" inputmode="decimal" />
+          </div>
+        </div>
+
+        <div class="balance-card receipt-total-card">
+          <span id="receiptRunningTotal" class="balance-amount">0.00</span>
+          <p id="receiptTotalDetail">Items + tax + tip</p>
+        </div>
+
+        <p id="receiptFormError" class="form-error is-hidden"></p>
+
+        <div class="modal-actions">
+          <button id="cancelReceiptBtn" class="secondary-btn" type="button">Cancel</button>
+          <button id="applyReceiptBtn" class="primary-btn" type="button">Apply to expense</button>
+        </div>
       </section>
     </div>
 
